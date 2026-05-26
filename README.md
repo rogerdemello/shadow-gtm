@@ -35,6 +35,10 @@ score and a one-click battlecard.
 - **AI recommended plays** — every signal ranked by opportunity score.
 - **Battlecards** — one click turns a competitor's signals into a Markdown sales
   battlecard (why we win / their weaknesses / objection handling / outbound angle).
+- **War Room** — type an attack directive ("Attack HubSpot in the SMB market")
+  and Claude turns the live signals into an executable plan: thesis, exploitable
+  weaknesses, pricing/positioning gaps, who to hit first, a 30-day campaign, and
+  an outbound opener.
 
 ## Bright Data integration (required)
 
@@ -106,6 +110,8 @@ Claude call still needs `ANTHROPIC_API_KEY`.
    the scrape.
 4. Show the **AI recommended plays** ranked by opportunity score.
 5. Click **Battlecard** on a competitor → live-generated sales enablement.
+6. Open **⚔ War Room**, type *"Attack HubSpot in the SMB market"* → a full,
+   signal-grounded attack plan. (The closer.)
 
 ## Repo layout
 
@@ -117,7 +123,8 @@ app/
     companies/             # add / list / remove watchlist
     scan/                  # start a scan + per-company scan
     battlecard/            # generate / fetch battlecards
-components/                # dashboard, feed, matrix, recommendations, battlecard
+    warroom/               # generate an attack plan from live signals
+components/                # dashboard, feed, matrix, recommendations, battlecard, war room
 lib/
   brightdata.ts            # Bright Data: Web Unlocker + SERP API + Scraping Browser
   ai.ts                    # Claude: structured signal extraction + battlecards

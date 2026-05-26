@@ -7,7 +7,14 @@ import CompetitorMatrix from "./CompetitorMatrix";
 import IntelligenceFeed from "./IntelligenceFeed";
 import Recommendations from "./Recommendations";
 import BattlecardModal from "./BattlecardModal";
+import WarRoomModal from "./WarRoomModal";
 import { LiveDot } from "./bits";
+
+interface AttackPlan {
+  markdown: string;
+  companyName: string | null;
+  directive: string;
+}
 
 interface Config {
   brightData: boolean;
@@ -32,6 +39,10 @@ export default function Dashboard() {
     markdown: string | null;
     loading: boolean;
   } | null>(null);
+
+  const [warOpen, setWarOpen] = useState(false);
+  const [warPlan, setWarPlan] = useState<AttackPlan | null>(null);
+  const [warLoading, setWarLoading] = useState(false);
 
   const loadState = useCallback(async () => {
     const res = await fetch("/api/state");
@@ -139,13 +150,42 @@ export default function Dashboard() {
     }
   }, []);
 
-  // Esc closes the modal.
+  const generatePlan = useCallback(
+    async (directive: string, companyId: string | null) => {
+      setWarLoading(true);
+      try {
+        const res = await fetch("/api/warroom", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ directive, companyId }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "War Room failed");
+        setWarPlan(data.plan);
+      } catch (e) {
+        setWarPlan({
+          markdown: `**Error:** ${(e as Error).message}`,
+          companyName: null,
+          directive,
+        });
+      } finally {
+        setWarLoading(false);
+      }
+    },
+    [],
+  );
+
+  // Esc closes whichever modal is open.
   useEffect(() => {
-    if (!card) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setCard(null);
+    if (!card && !warOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setCard(null);
+      setWarOpen(false);
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [card]);
+  }, [card, warOpen]);
 
   const highImpact = signals.filter((s) => s.impact === "high").length;
   const avgScore = signals.length
@@ -167,6 +207,13 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-3">
           <LiveDot active={scanning} />
+          <button
+            onClick={() => setWarOpen(true)}
+            disabled={companies.length === 0}
+            className="rounded-lg border border-signal-high/50 px-4 py-2.5 text-sm font-bold text-signal-high transition hover:bg-signal-high/10 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            ⚔ War Room
+          </button>
           <button
             onClick={runScan}
             disabled={scanning || companies.length === 0}
@@ -240,6 +287,16 @@ export default function Dashboard() {
           markdown={card.markdown}
           loading={card.loading}
           onClose={() => setCard(null)}
+        />
+      )}
+
+      {warOpen && (
+        <WarRoomModal
+          companies={companies}
+          plan={warPlan}
+          loading={warLoading}
+          onGenerate={generatePlan}
+          onClose={() => setWarOpen(false)}
         />
       )}
     </div>

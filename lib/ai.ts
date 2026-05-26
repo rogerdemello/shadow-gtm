@@ -194,6 +194,63 @@ export async function generateBattlecard(
     .trim();
 }
 
+const WARROOM_SYSTEM = `You are an elite competitive GTM strategist running a "war room" for a B2B SaaS revenue team. Given a target competitor (with live intelligence signals) and the operator's directive, produce a sharp, executable attack plan in Markdown. Sections:
+- **Thesis** (1-2 sentences: the core opening and why now, grounded in the signals)
+- **Exploitable weaknesses** (bullets — quote the specific signals/changes that create them)
+- **Pricing & positioning gaps** (where they're vulnerable and how we wedge in)
+- **Who to hit first** (the segment/account profile with the strongest intent right now)
+- **30-day campaign** (concrete plays across outbound, content, and timing)
+- **Outbound opener** (a short, specific cold-email opener a rep can send today)
+Be aggressive, specific, and grounded in the provided signals — never generic. If the directive names a segment or angle, build the plan around it. No preamble, no caveats — just the plan.`;
+
+function signalDigest(signals: Signal[]): string {
+  if (!signals.length) return "(no live signals captured yet)";
+  return signals
+    .map(
+      (s) =>
+        `- [${s.type}/${s.impact}, opp ${s.opportunityScore}] ${s.description} — ${s.reasoning}`,
+    )
+    .join("\n");
+}
+
+/** War Room: turn a directive + live signals into an executable attack plan. */
+export async function generateAttackPlan(
+  directive: string,
+  companyName: string | null,
+  signals: Signal[],
+): Promise<string> {
+  const target = companyName
+    ? `Target competitor: ${companyName}`
+    : "Target: the overall competitive set";
+
+  const response = await client().messages.create({
+    model: MODEL,
+    max_tokens: 4096,
+    system: [
+      {
+        type: "text",
+        text: WARROOM_SYSTEM,
+        cache_control: { type: "ephemeral" },
+      },
+    ],
+    output_config: { effort: EFFORT },
+    messages: [
+      {
+        role: "user",
+        content: `${target}\n\nOperator directive: "${directive}"\n\nLive intelligence signals:\n${signalDigest(
+          signals,
+        )}\n\nWrite the attack plan.`,
+      },
+    ],
+  });
+
+  return response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
+}
+
 function clamp(n: number, lo: number, hi: number): number {
   if (Number.isNaN(n)) return lo;
   return Math.min(hi, Math.max(lo, n));

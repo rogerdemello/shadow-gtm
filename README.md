@@ -40,12 +40,13 @@ score and a one-click battlecard.
 
 | Product | Where it's used |
 |---|---|
-| **Web Unlocker** | `lib/brightdata.ts → fetchPage()` — fetches competitor pricing/site pages, bypassing bot detection. Called from `lib/workflow.ts`. |
+| **Web Unlocker** | `lib/brightdata.ts → fetchPage()` — fetches competitor pricing/site pages, bypassing bot detection. Default fetch path. |
 | **SERP API** | `lib/brightdata.ts → serpSearch()` — structured Google results (`brd_json`) for buying-intent / news signals. |
+| **Scraping Browser** | `lib/brightdata.ts → fetchPageRendered()` — full Chrome rendering over CDP (`puppeteer-core`) for JS-heavy / interactive sites (e.g. LinkedIn). Mark a competitor **"JS-heavy"** in the UI to route it here. |
 
-Both go through Bright Data's unified API endpoint (`https://api.brightdata.com/request`)
-with a named zone, so there's no proxy/TLS plumbing in the app. Swap in
-**Scraping Browser** for JS-heavy targets by pointing `fetchPage` at a browser zone.
+Web Unlocker + SERP API go through Bright Data's unified API endpoint
+(`https://api.brightdata.com/request`) with a named zone — no proxy/TLS plumbing.
+Scraping Browser connects to a remote Chrome over a WebSocket CDP endpoint.
 
 ## Tech
 
@@ -76,14 +77,17 @@ In `.env.local`:
 BRIGHTDATA_API_TOKEN=...        # Bright Data dashboard → Account settings → API tokens
 BRIGHTDATA_UNLOCKER_ZONE=web_unlocker1   # name of your Web Unlocker zone
 BRIGHTDATA_SERP_ZONE=serp_api1           # name of your SERP API zone
+BRIGHTDATA_BROWSER_WS=wss://...          # Scraping Browser CDP endpoint (optional)
 ANTHROPIC_API_KEY=...
 ANTHROPIC_MODEL=claude-opus-4-7          # claude-sonnet-4-6 is ~2x faster for live demos
 ANTHROPIC_EFFORT=medium                  # low | medium | high | max
 ```
 
-Create the two zones in the Bright Data dashboard (Proxies & Scraping Infra →
+Create the zones in the Bright Data dashboard (Proxies & Scraping Infra →
 add a **Web Unlocker** zone and a **SERP API** zone) and put their names above.
-For the SERP zone, make sure JSON parsing (`brd_json`) is available.
+For the SERP zone, make sure JSON parsing (`brd_json`) is available. Optionally
+add a **Scraping Browser** zone and paste its `wss://…` connection string into
+`BRIGHTDATA_BROWSER_WS` to render JS-heavy sites.
 
 ### Mock mode (no keys / offline)
 
@@ -115,7 +119,7 @@ app/
     battlecard/            # generate / fetch battlecards
 components/                # dashboard, feed, matrix, recommendations, battlecard
 lib/
-  brightdata.ts            # Bright Data Web Unlocker + SERP API client
+  brightdata.ts            # Bright Data: Web Unlocker + SERP API + Scraping Browser
   ai.ts                    # Claude: structured signal extraction + battlecards
   workflow.ts              # the core scan loop (collect → diff → reason → store)
   store.ts                 # JSON persistence behind a swappable interface

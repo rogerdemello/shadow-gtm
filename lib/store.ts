@@ -77,6 +77,7 @@ export async function addCompany(input: {
   name: string;
   domain: string;
   pricingUrl?: string;
+  renderJs?: boolean;
 }): Promise<Company> {
   const domain = input.domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
   const company: Company = {
@@ -84,6 +85,7 @@ export async function addCompany(input: {
     name: input.name.trim(),
     domain,
     pricingUrl: input.pricingUrl?.trim() || `https://${domain}/pricing`,
+    renderJs: Boolean(input.renderJs),
     createdAt: new Date().toISOString(),
   };
   return mutate((db) => {

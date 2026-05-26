@@ -69,6 +69,36 @@ export async function fetchPage(url: string): Promise<string> {
   return brdRequest(zone, url);
 }
 
+/** Fetch a fully-rendered page via the Bright Data Scraping Browser (CDP).
+ *  Use for JS-heavy / interactive sites (e.g. LinkedIn) where the Web Unlocker's
+ *  static HTML isn't enough. Connects to Bright Data's remote Chrome over a
+ *  WebSocket endpoint — no local browser needed. */
+export async function fetchPageRendered(url: string): Promise<string> {
+  if (isMock()) return mockPage(url);
+
+  const ws = process.env.BRIGHTDATA_BROWSER_WS;
+  if (!ws) {
+    throw new BrightDataError(
+      "BRIGHTDATA_BROWSER_WS is not set (Scraping Browser CDP endpoint)",
+    );
+  }
+
+  // Imported lazily so the dependency only loads when rendering is actually used.
+  const { default: puppeteer } = await import("puppeteer-core");
+  const browser = await puppeteer.connect({ browserWSEndpoint: ws });
+  try {
+    const page = await browser.newPage();
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: TIMEOUT_MS });
+    // Let SPA content settle, but don't hang the whole scan if it never idles.
+    await page
+      .waitForNetworkIdle({ idleTime: 1500, timeout: 15_000 })
+      .catch(() => {});
+    return await page.content();
+  } finally {
+    await browser.close().catch(() => {});
+  }
+}
+
 /** Structured Google results for a query through the SERP API zone. */
 export async function serpSearch(query: string, num = 10): Promise<SerpResult[]> {
   if (isMock()) return mockSerp(query);
@@ -97,4 +127,8 @@ export async function serpSearch(query: string, num = 10): Promise<SerpResult[]>
 
 export function brightDataConfigured(): boolean {
   return Boolean(process.env.BRIGHTDATA_API_TOKEN) && process.env.SHADOW_GTM_MOCK !== "1";
+}
+
+export function scrapingBrowserConfigured(): boolean {
+  return Boolean(process.env.BRIGHTDATA_BROWSER_WS) && process.env.SHADOW_GTM_MOCK !== "1";
 }

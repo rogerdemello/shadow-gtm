@@ -89,6 +89,14 @@ export default function CompetitorMatrix({
                       <span className="text-sm font-semibold text-slate-100">
                         {c.name}
                       </span>
+                      {c.renderJs && (
+                        <span
+                          className="rounded bg-signal-info/15 px-1 font-mono text-[9px] font-bold text-signal-info"
+                          title="Rendered via Bright Data Scraping Browser"
+                        >
+                          ⚡JS
+                        </span>
+                      )}
                     </div>
                     <span className="font-mono text-[10px] text-slate-600">
                       {c.domain}

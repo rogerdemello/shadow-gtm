@@ -9,7 +9,12 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  let body: { name?: string; domain?: string; pricingUrl?: string };
+  let body: {
+    name?: string;
+    domain?: string;
+    pricingUrl?: string;
+    renderJs?: boolean;
+  };
   try {
     body = await req.json();
   } catch {
@@ -25,6 +30,11 @@ export async function POST(req: Request) {
     );
   }
 
-  const company = await addCompany({ name, domain, pricingUrl: body.pricingUrl });
+  const company = await addCompany({
+    name,
+    domain,
+    pricingUrl: body.pricingUrl,
+    renderJs: body.renderJs,
+  });
   return NextResponse.json({ company }, { status: 201 });
 }

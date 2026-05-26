@@ -1,0 +1,74 @@
+/* Web fonts loaded via CSS so the build never needs network access.
+   Falls back to the stacks below if offline. */
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html,
+body {
+  background: #05070a;
+  color: #cdd6e4;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle grid backdrop — the "terminal" feel. */
+body {
+  background-image:
+    radial-gradient(circle at 15% 10%, rgba(61, 220, 151, 0.06), transparent 40%),
+    radial-gradient(circle at 85% 0%, rgba(58, 160, 255, 0.06), transparent 35%),
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 44px 44px, 44px 44px;
+  min-height: 100vh;
+}
+
+/* Thin scrollbars to match the dense data UI. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #252e3d transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #252e3d;
+  border-radius: 8px;
+}
+
+/* Battlecard markdown rendering. */
+.markdown h2,
+.markdown h3 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: #e7edf6;
+  margin: 1rem 0 0.4rem;
+}
+.markdown strong {
+  color: #f0f4fa;
+}
+.markdown ul {
+  list-style: disc;
+  padding-left: 1.2rem;
+  margin: 0.4rem 0;
+}
+.markdown li {
+  margin: 0.2rem 0;
+}
+.markdown p {
+  margin: 0.5rem 0;
+}
+.markdown code {
+  font-family: var(--font-mono);
+  background: #11161f;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}

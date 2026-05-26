@@ -83,55 +83,47 @@ export default function Dashboard() {
     await fetch(`/api/companies/${companyId}`, { method: "DELETE" });
   }, []);
 
-  const runScan = useCallback(async () => {
+  const runScan = useCallback(() => {
     setError(null);
     setScanning(true);
-    try {
-      const res = await fetch("/api/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Scan failed to start");
 
-      const { scanId, queue } = data as {
-        scanId: string;
-        queue: { id: string; name: string }[];
-      };
+    const es = new EventSource("/api/scan/stream");
 
-      for (const item of queue) {
-        setScanningId(item.id);
-        setScanningName(item.name);
-        try {
-          const r = await fetch("/api/scan/company", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ scanId, companyId: item.id }),
-          });
-          const body = await r.json();
-          const result = body.result as ScanCompanyResult | undefined;
-          if (result?.error) {
-            setError(`${item.name}: ${result.error}`);
-          }
-          if (result) {
-            // Replace this company's signals; newest companies float to top.
-            setSignals((prev) => [
-              ...result.signals,
-              ...prev.filter((s) => s.companyId !== item.id),
-            ]);
-          }
-        } catch (e) {
-          setError(`${item.name}: ${(e as Error).message}`);
-        }
-      }
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
+    const finish = () => {
+      es.close();
       setScanning(false);
       setScanningId(null);
       setScanningName(null);
-    }
+    };
+
+    es.onmessage = (e) => {
+      const ev = JSON.parse(e.data) as
+        | { type: "start" }
+        | { type: "company-start"; companyId: string; name: string }
+        | { type: "company-done"; result: ScanCompanyResult }
+        | { type: "error"; error: string }
+        | { type: "done" };
+
+      if (ev.type === "company-start") {
+        setScanningId(ev.companyId);
+        setScanningName(ev.name);
+      } else if (ev.type === "company-done") {
+        const result = ev.result;
+        if (result.error) setError(`${result.companyName}: ${result.error}`);
+        // Replace this company's signals; newest companies float to the top.
+        setSignals((prev) => [
+          ...result.signals,
+          ...prev.filter((s) => s.companyId !== result.companyId),
+        ]);
+      } else if (ev.type === "error") {
+        setError(ev.error);
+      } else if (ev.type === "done") {
+        finish();
+      }
+    };
+
+    // Network drop / server close mid-stream — stop and reset (no auto-reconnect).
+    es.onerror = () => finish();
   }, []);
 
   const openBattlecard = useCallback(async (company: Company) => {

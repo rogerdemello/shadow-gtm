@@ -166,16 +166,6 @@ export async function createScan(companyIds: string[]): Promise<Scan> {
   });
 }
 
-export async function finishScan(scanId: string, signalCount: number): Promise<void> {
-  return mutate((db) => {
-    const scan = db.scans.find((s) => s.id === scanId);
-    if (scan) {
-      scan.finishedAt = new Date().toISOString();
-      scan.signalCount = signalCount;
-    }
-  });
-}
-
 // ── Battlecards ───────────────────────────────────────────────────────────
 export async function saveBattlecard(card: Battlecard): Promise<void> {
   return mutate((db) => {

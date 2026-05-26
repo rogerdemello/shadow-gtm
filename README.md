@@ -121,7 +121,7 @@ app/
   api/
     state/                 # hydrate dashboard (companies, signals, config)
     companies/             # add / list / remove watchlist
-    scan/                  # stream/ = live SSE scan (primary); + per-company fallback
+    scan/stream/           # live SSE scan — streams the feed in as each company completes
     battlecard/            # generate / fetch battlecards
     warroom/               # generate an attack plan from live signals
 components/                # dashboard, feed, matrix, recommendations, battlecard, war room

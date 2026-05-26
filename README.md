@@ -139,6 +139,12 @@ Deploys to Vercel as-is. For persistence across serverless invocations, swap the
 JSON store in `lib/store.ts` for a hosted DB (Neon/Turso/Vercel Postgres) — every
 read/write already goes through that one module.
 
+## Submission materials
+
+- [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) — 90-second demo script with timing.
+- [`docs/SLIDES.md`](docs/SLIDES.md) — 10-slide pitch deck outline, mapped to judging criteria.
+- [`docs/SUBMISSION.md`](docs/SUBMISSION.md) — ready-to-paste title / descriptions / tags.
+
 ---
 
-MIT.
+MIT — see [`LICENSE`](LICENSE).

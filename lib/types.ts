@@ -20,6 +20,8 @@ export interface Company {
   domain: string;
   /** Page we diff + extract pricing signals from. Defaults to https://domain/pricing */
   pricingUrl: string;
+  /** Render via Bright Data Scraping Browser (for JS-heavy / interactive sites). */
+  renderJs?: boolean;
   createdAt: string;
 }
 

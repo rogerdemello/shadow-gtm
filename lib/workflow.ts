@@ -1,5 +1,5 @@
 import type { Company, ScanCompanyResult, Snapshot } from "./types";
-import { fetchPage, serpSearch } from "./brightdata";
+import { fetchPage, fetchPageRendered, serpSearch } from "./brightdata";
 import { htmlToText } from "./html";
 import { extractSignals } from "./ai";
 import {
@@ -45,10 +45,12 @@ export async function scanCompany(
   };
 
   try {
-    // 1. Collect: pricing/site page (Web Unlocker) + intent search (SERP API),
-    //    in parallel. A SERP failure shouldn't sink the whole company.
+    // 1. Collect: pricing/site page + intent search (SERP API), in parallel.
+    //    JS-heavy sites render through the Scraping Browser; the rest use the
+    //    Web Unlocker. A SERP failure shouldn't sink the whole company.
+    const fetchSite = company.renderJs ? fetchPageRendered : fetchPage;
     const [pricingHtml, serp] = await Promise.all([
-      fetchPage(company.pricingUrl),
+      fetchSite(company.pricingUrl),
       serpSearch(
         `${company.name} pricing OR alternatives OR layoffs OR funding OR reviews`,
         8,

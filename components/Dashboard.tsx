@@ -13,6 +13,7 @@ interface Config {
   brightData: boolean;
   anthropic: boolean;
   mock: boolean;
+  scrapingBrowser: boolean;
 }
 
 export default function Dashboard() {
@@ -45,14 +46,14 @@ export default function Dashboard() {
   }, [loadState]);
 
   const addCompany = useCallback(
-    async (name: string, domain: string, pricingUrl?: string) => {
+    async (name: string, domain: string, pricingUrl?: string, renderJs?: boolean) => {
       setBusy(true);
       setError(null);
       try {
         const res = await fetch("/api/companies", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, domain, pricingUrl }),
+          body: JSON.stringify({ name, domain, pricingUrl, renderJs }),
         });
         if (!res.ok) throw new Error((await res.json()).error || "Add failed");
         await loadState();
@@ -214,6 +215,7 @@ export default function Dashboard() {
             onAdd={addCompany}
             existingDomains={companies.map((c) => c.domain)}
             busy={busy}
+            scrapingBrowser={config?.scrapingBrowser ?? false}
           />
           <Recommendations signals={signals} />
         </div>

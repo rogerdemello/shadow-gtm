@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { listCompanies, listSignals } from "@/lib/store";
-import { brightDataConfigured } from "@/lib/brightdata";
+import { brightDataConfigured, scrapingBrowserConfigured } from "@/lib/brightdata";
 import { anthropicConfigured } from "@/lib/ai";
 
 export const runtime = "nodejs";
@@ -19,6 +19,7 @@ export async function GET() {
     signals,
     config: {
       brightData: brightDataConfigured(),
+      scrapingBrowser: scrapingBrowserConfigured(),
       anthropic: anthropicConfigured(),
       mock: process.env.SHADOW_GTM_MOCK === "1" || !process.env.BRIGHTDATA_API_TOKEN,
     },

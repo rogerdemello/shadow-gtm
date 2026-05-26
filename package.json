@@ -3,11 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "description": "Autonomous AI GTM intelligence — monitors the live web via Bright Data and turns competitor movement into ranked revenue plays.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "start": "next start"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",

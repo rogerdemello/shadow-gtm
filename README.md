@@ -135,15 +135,19 @@ lib/
 
 ## Deploy
 
-Deploys to Vercel as-is. For persistence across serverless invocations, swap the
+Deploys to Vercel as-is — on Vercel the JSON store writes to `/tmp` (the project
+filesystem is read-only there), which persists within a warm instance: fine for a
+live demo session. For durable persistence across serverless invocations, swap the
 JSON store in `lib/store.ts` for a hosted DB (Neon/Turso/Vercel Postgres) — every
 read/write already goes through that one module.
 
 ## Submission materials
 
+- [`docs/deck.html`](docs/deck.html) — **presentable pitch deck** (open in a browser, arrow-key nav; present live or screen-record).
+- [`docs/SLIDES.md`](docs/SLIDES.md) — the deck outline, mapped to judging criteria.
 - [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) — 90-second demo script with timing.
-- [`docs/SLIDES.md`](docs/SLIDES.md) — 10-slide pitch deck outline, mapped to judging criteria.
 - [`docs/SUBMISSION.md`](docs/SUBMISSION.md) — ready-to-paste title / descriptions / tags.
+- [`docs/cover.svg`](docs/cover.svg) — **cover image** (open in a browser → screenshot to export PNG/JPG for the lablab cover upload).
 
 ---
 

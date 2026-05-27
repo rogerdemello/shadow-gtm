@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import crypto from "node:crypto";
 import type {
   Battlecard,
@@ -22,7 +23,13 @@ interface DB {
   battlecards: Battlecard[];
 }
 
-const DATA_DIR = path.join(process.cwd(), "data");
+// Vercel's project filesystem is read-only at runtime; only /tmp is writable.
+// On Vercel we use a tmp dir (persists within a warm instance — fine for a demo
+// session). Locally we use ./data. For durable prod persistence, swap this
+// module for Postgres/Turso — everything goes through here.
+const DATA_DIR = process.env.VERCEL
+  ? path.join(os.tmpdir(), "shadow-gtm")
+  : path.join(process.cwd(), "data");
 const DB_PATH = path.join(DATA_DIR, "db.json");
 
 const EMPTY_DB: DB = {

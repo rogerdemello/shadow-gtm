@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+  <defs>
+    <radialGradient id="glowG" cx="18%" cy="8%" r="55%">
+      <stop offset="0%" stop-color="#3ddc97" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#3ddc97" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="92%" cy="0%" r="50%">
+      <stop offset="0%" stop-color="#3aa0ff" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#3aa0ff" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="44" height="44" patternUnits="userSpaceOnUse">
+      <path d="M44 0H0V44" fill="none" stroke="#ffffff" stroke-opacity="0.022" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <!-- backdrop -->
+  <rect width="1200" height="630" fill="#05070a"/>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+  <rect width="1200" height="630" fill="url(#glowG)"/>
+  <rect width="1200" height="630" fill="url(#glowB)"/>
+
+  <!-- eyebrow -->
+  <text x="80" y="92" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="19" letter-spacing="4" fill="#5a6678">WEB DATA UNLOCKED  ·  TRACK 1 — GTM INTELLIGENCE</text>
+
+  <!-- logo mark (◢) + wordmark -->
+  <path d="M80 150 L80 208 L138 208 Z" fill="#3ddc97"/>
+  <text x="158" y="205" font-size="86" font-weight="700" fill="#f0f4fa">Shadow GTM</text>
+
+  <!-- tagline -->
+  <text x="82" y="262" font-size="32" fill="#9fb0c3">Autonomous web intelligence for revenue teams.</text>
+
+  <!-- live signal card -->
+  <g>
+    <rect x="80" y="318" width="1040" height="168" rx="16" fill="#11161f" stroke="#252e3d" stroke-width="1"/>
+    <rect x="80" y="318" width="5" height="168" rx="2" fill="#3ddc97"/>
+
+    <circle cx="116" cy="356" r="6" fill="#3ddc97"/>
+    <text x="132" y="362" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="16" letter-spacing="3" fill="#3ddc97">LIVE SIGNAL · DETECTED</text>
+
+    <text x="116" y="404" font-size="30" font-weight="600" fill="#f0f4fa">HubSpot raised Starter pricing 60%</text>
+    <text x="116" y="446" font-size="22" fill="#9fb0c3">
+      <tspan font-family="'JetBrains Mono', ui-monospace, monospace" fill="#5a6678">why &#8594; </tspan>
+      moving upmarket; their SMB base is now exposed — launch a migration play.
+    </text>
+
+    <!-- opportunity score badge -->
+    <rect x="980" y="346" width="108" height="64" rx="10" fill="#3ddc97" fill-opacity="0.14" stroke="#3ddc97" stroke-opacity="0.5"/>
+    <text x="1034" y="382" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="34" font-weight="700" fill="#3ddc97" text-anchor="middle">92</text>
+    <text x="1034" y="400" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="11" letter-spacing="2" fill="#3ddc97" text-anchor="middle" opacity="0.8">OPP SCORE</text>
+  </g>
+
+  <!-- footer -->
+  <text x="80" y="566" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="18" fill="#7a8699">live web  &#8594;  AI reasoning  &#8594;  the play</text>
+  <text x="1120" y="566" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="18" fill="#7a8699" text-anchor="end">Bright Data  &#215;  Claude</text>
+</svg>

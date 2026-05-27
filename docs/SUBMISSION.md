@@ -58,8 +58,12 @@ Anthropic · Next.js · TypeScript · Real-time Web Data
 
 ## Links
 - **GitHub:** https://github.com/rogerdemello/shadow-gtm
-- **Demo URL:** _(add after deploy)_
-- **Video:** _(add link)_
+- **Demo URL:** _(add after deploy — Vercel works out of the box; data is per-session unless a DB is wired)_
+- **Video:** _(add link — script in `docs/DEMO_SCRIPT.md`)_
+
+## Assets in this repo
+- **Cover image:** `docs/cover.svg` (open in a browser → screenshot to export PNG/JPG).
+- **Pitch deck:** `docs/deck.html` (present in-browser, arrow-key nav) — outline in `docs/SLIDES.md`.
 
 ## Bright Data Requirement
 ✅ Uses three Bright Data products — **Web Unlocker, SERP API, and Scraping

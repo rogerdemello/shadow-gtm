@@ -40,7 +40,9 @@ export default function AddCompany({
     setRenderJs(false);
   }
 
-  const has = (d: string) => existingDomains.includes(d.replace(/^https?:\/\//, ""));
+  const normalize = (d: string) =>
+    d.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "").toLowerCase();
+  const has = (d: string) => existingDomains.includes(normalize(d));
 
   return (
     <div className="rounded-xl border border-ink-500/60 bg-ink-800/60 p-4">
@@ -70,7 +72,11 @@ export default function AddCompany({
           className="w-full rounded-lg border border-ink-500 bg-ink-700 px-3 py-2 text-sm outline-none placeholder:text-slate-600 focus:border-accent/60"
         />
         <label
-          className="flex cursor-pointer items-center gap-2 font-mono text-[11px] text-slate-400"
+          className={`flex items-center gap-2 font-mono text-[11px] ${
+            scrapingBrowser
+              ? "cursor-pointer text-slate-400"
+              : "cursor-not-allowed text-slate-600"
+          }`}
           title={
             scrapingBrowser
               ? "Render with Bright Data Scraping Browser"
@@ -79,12 +85,13 @@ export default function AddCompany({
         >
           <input
             type="checkbox"
-            checked={renderJs}
+            checked={renderJs && scrapingBrowser}
+            disabled={!scrapingBrowser}
             onChange={(e) => setRenderJs(e.target.checked)}
-            className="accent-accent"
+            className="accent-accent disabled:opacity-40"
           />
           ⚡ JS-heavy site — render via Scraping Browser
-          {!scrapingBrowser && renderJs && (
+          {!scrapingBrowser && (
             <span className="text-signal-mid">(endpoint not configured)</span>
           )}
         </label>

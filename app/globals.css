@@ -44,21 +44,38 @@ body {
   border-radius: 8px;
 }
 
-/* Battlecard markdown rendering. */
+/* Battlecard / War-Room markdown rendering. */
 .markdown h2,
-.markdown h3 {
+.markdown h3,
+.markdown h4 {
   font-family: var(--font-sans);
   font-weight: 600;
   color: #e7edf6;
   margin: 1rem 0 0.4rem;
 }
+.markdown h2 {
+  font-size: 1.05rem;
+}
+.markdown h3 {
+  font-size: 0.95rem;
+}
+.markdown h4 {
+  font-size: 0.85rem;
+  color: #cdd6e4;
+}
 .markdown strong {
   color: #f0f4fa;
 }
-.markdown ul {
-  list-style: disc;
+.markdown ul,
+.markdown ol {
   padding-left: 1.2rem;
   margin: 0.4rem 0;
+}
+.markdown ul {
+  list-style: disc;
+}
+.markdown ol {
+  list-style: decimal;
 }
 .markdown li {
   margin: 0.2rem 0;
@@ -71,4 +88,21 @@ body {
   background: #11161f;
   padding: 0.1rem 0.3rem;
   border-radius: 4px;
+  font-size: 0.85em;
+}
+.markdown pre {
+  background: #11161f;
+  border: 1px solid #252e3d;
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  margin: 0.6rem 0;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+.markdown pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
 }

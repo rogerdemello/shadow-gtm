@@ -25,11 +25,13 @@ export interface Company {
   createdAt: string;
 }
 
+export type PageType = "pricing" | "homepage";
+
 /** A captured copy of a page so the next scan can answer "what changed?". */
 export interface Snapshot {
   id: string;
   companyId: string;
-  pageType: "pricing" | "homepage";
+  pageType: PageType;
   url: string;
   /** Cleaned, text-only content used for diffing + LLM extraction. */
   text: string;
@@ -56,6 +58,27 @@ export interface Signal {
   /** Concrete next move for the revenue team. */
   recommendedAction: string;
   sourceUrl: string;
+  /** Verbatim quote from the source that proves the signal — drives the
+   *  "Evidence" panel so claims are auditable. May be empty if the model
+   *  couldn't isolate a single quote (e.g. pure pattern across many sources). */
+  quote?: string;
+  createdAt: string;
+}
+
+export interface SerpEvidence {
+  title: string;
+  link: string;
+  snippet: string;
+}
+
+/** Per-scan context attached to a company so the UI can show what fed the AI. */
+export interface ScanEvidence {
+  scanId: string;
+  companyId: string;
+  changeSummary: string | null;
+  serp: SerpEvidence[];
+  /** URLs we monitored this scan (pricing + homepage etc). */
+  sources: { url: string; pageType: Snapshot["pageType"] }[];
   createdAt: string;
 }
 

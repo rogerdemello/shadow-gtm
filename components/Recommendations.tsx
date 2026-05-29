@@ -15,8 +15,8 @@ export default function Recommendations({ signals }: { signals: Signal[] }) {
       </h2>
 
       {top.length === 0 ? (
-        <p className="text-sm text-slate-600">
-          Ranked plays appear here after a scan.
+        <p className="text-sm leading-snug text-slate-600">
+          Ranked plays appear here after a scan. <span className="text-accent/70">Try with demo data</span> in the header to see them populated.
         </p>
       ) : (
         <ol className="space-y-2">

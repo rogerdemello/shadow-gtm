@@ -6,6 +6,7 @@ import type {
   Battlecard,
   Company,
   Scan,
+  ScanEvidence,
   Signal,
   Snapshot,
 } from "./types";
@@ -21,6 +22,7 @@ interface DB {
   signals: Signal[];
   scans: Scan[];
   battlecards: Battlecard[];
+  evidence: ScanEvidence[];
 }
 
 // Vercel's project filesystem is read-only at runtime; only /tmp is writable.
@@ -38,6 +40,7 @@ const EMPTY_DB: DB = {
   signals: [],
   scans: [],
   battlecards: [],
+  evidence: [],
 };
 
 // Serialize writes within a single process so concurrent route handlers don't
@@ -59,16 +62,22 @@ async function writeDb(db: DB): Promise<void> {
   await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf8");
 }
 
-/** Read-modify-write the DB under a process-local lock. Returns mutator result. */
+/** Read-modify-write the DB under a process-local lock. Returns mutator result.
+ *  The chain isolates each task's result/rejection from siblings — a thrown
+ *  validation error (e.g. duplicate company) must not poison later mutations. */
 async function mutate<T>(fn: (db: DB) => T | Promise<T>): Promise<T> {
-  let result!: T;
-  writeChain = writeChain.then(async () => {
+  const prev = writeChain.catch(() => undefined);
+  const task = prev.then(async () => {
     const db = await readDb();
-    result = await fn(db);
+    const result = await fn(db);
     await writeDb(db);
+    return result;
   });
-  await writeChain;
-  return result;
+  writeChain = task.then(
+    () => undefined,
+    () => undefined,
+  );
+  return task;
 }
 
 export const id = () => crypto.randomUUID();
@@ -80,13 +89,24 @@ export async function listCompanies(): Promise<Company[]> {
   return (await readDb()).companies;
 }
 
+export class DuplicateCompanyError extends Error {
+  constructor(public domain: string) {
+    super(`${domain} is already on the watchlist`);
+    this.name = "DuplicateCompanyError";
+  }
+}
+
+export function normalizeDomain(raw: string): string {
+  return raw.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "").toLowerCase();
+}
+
 export async function addCompany(input: {
   name: string;
   domain: string;
   pricingUrl?: string;
   renderJs?: boolean;
 }): Promise<Company> {
-  const domain = input.domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const domain = normalizeDomain(input.domain);
   const company: Company = {
     id: id(),
     name: input.name.trim(),
@@ -96,6 +116,9 @@ export async function addCompany(input: {
     createdAt: new Date().toISOString(),
   };
   return mutate((db) => {
+    if (db.companies.some((c) => c.domain === domain)) {
+      throw new DuplicateCompanyError(domain);
+    }
     db.companies.push(company);
     return company;
   });
@@ -107,6 +130,7 @@ export async function removeCompany(companyId: string): Promise<void> {
     db.signals = db.signals.filter((s) => s.companyId !== companyId);
     db.snapshots = db.snapshots.filter((s) => s.companyId !== companyId);
     db.battlecards = db.battlecards.filter((b) => b.companyId !== companyId);
+    db.evidence = db.evidence.filter((e) => e.companyId !== companyId);
   });
 }
 
@@ -170,6 +194,43 @@ export async function createScan(companyIds: string[]): Promise<Scan> {
   return mutate((db) => {
     db.scans.push(scan);
     return scan;
+  });
+}
+
+// ── Evidence (what fed each company's most recent scan) ───────────────────
+export async function saveEvidence(ev: ScanEvidence): Promise<void> {
+  return mutate((db) => {
+    db.evidence = db.evidence.filter((e) => e.companyId !== ev.companyId);
+    db.evidence.push(ev);
+  });
+}
+
+export async function listEvidence(): Promise<ScanEvidence[]> {
+  return (await readDb()).evidence;
+}
+
+export async function getEvidence(
+  companyId: string,
+): Promise<ScanEvidence | undefined> {
+  return (await readDb()).evidence.find((e) => e.companyId === companyId);
+}
+
+// ── Demo seed ─────────────────────────────────────────────────────────────
+/** Replace ALL state with a bundled snapshot — used by the "Load demo" button.
+ *  Caller's responsibility to ask the user before overwriting real work. */
+export async function loadSeedBundle(bundle: {
+  companies: Company[];
+  signals: Signal[];
+  evidence: ScanEvidence[];
+  battlecards: Battlecard[];
+}): Promise<void> {
+  return mutate((db) => {
+    db.companies = bundle.companies;
+    db.signals = bundle.signals;
+    db.evidence = bundle.evidence;
+    db.battlecards = bundle.battlecards;
+    db.snapshots = [];
+    db.scans = [];
   });
 }
 

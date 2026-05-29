@@ -14,8 +14,16 @@ export async function GET() {
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (ev: unknown) =>
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`));
+      let closed = false;
+      const send = (ev: unknown) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`));
+        } catch {
+          // Client disconnected mid-stream — stop trying to write.
+          closed = true;
+        }
+      };
 
       try {
         if (companies.length === 0) {
@@ -32,6 +40,7 @@ export async function GET() {
         });
 
         for (const company of companies) {
+          if (closed) break;
           send({ type: "company-start", companyId: company.id, name: company.name });
           const result = await scanCompany(company, scan.id);
           send({ type: "company-done", result });
@@ -42,7 +51,13 @@ export async function GET() {
         send({ type: "error", error: (err as Error).message });
         send({ type: "done" });
       } finally {
-        controller.close();
+        if (!closed) {
+          try {
+            controller.close();
+          } catch {
+            // Already closed by the runtime — ignore.
+          }
+        }
       }
     },
   });
@@ -52,6 +67,9 @@ export async function GET() {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      // Disable proxy buffering (nginx/Cloudflare/some Vercel paths) — keeps
+      // the per-company events arriving in real time on the client.
+      "X-Accel-Buffering": "no",
     },
   });
 }

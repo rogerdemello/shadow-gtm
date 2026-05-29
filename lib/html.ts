@@ -25,9 +25,17 @@ export function htmlToText(html: string): string {
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&apos;/gi, "'")
     .replace(/&mdash;/gi, "—")
+    .replace(/&ndash;/gi, "–")
+    .replace(/&hellip;/gi, "…")
     .replace(/&dollar;/gi, "$");
+
+  // Decode numeric character refs (decimal &#8217; and hex &#x2014;) — common
+  // in real pricing pages (curly quotes, dashes, etc).
+  text = text
+    .replace(/&#(\d+);/g, (_, n) => safeFromCodePoint(parseInt(n, 10)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => safeFromCodePoint(parseInt(n, 16)));
 
   // Collapse whitespace.
   text = text
@@ -37,6 +45,15 @@ export function htmlToText(html: string): string {
     .join("\n");
 
   return text.trim();
+}
+
+function safeFromCodePoint(n: number): string {
+  if (!Number.isFinite(n) || n < 0 || n > 0x10ffff) return "";
+  try {
+    return String.fromCodePoint(n);
+  } catch {
+    return "";
+  }
 }
 
 /** Trim to a token-friendly size while keeping the start (where pricing lives). */

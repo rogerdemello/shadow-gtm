@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Company } from "@/lib/types";
 import Markdown from "./Markdown";
+import CopyButton from "./CopyButton";
 
 const PRESET_DIRECTIVES = [
   "Attack their SMB base",
@@ -26,6 +27,14 @@ export default function WarRoomModal({
 }) {
   const [companyId, setCompanyId] = useState<string>("");
   const [directive, setDirective] = useState("");
+  const planRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = planRef.current;
+    if (!el || !loading) return;
+    const dist = el.scrollHeight - el.clientHeight - el.scrollTop;
+    if (dist < 80) el.scrollTop = el.scrollHeight;
+  }, [plan?.markdown, loading]);
 
   const run = () => {
     if (!directive.trim() || loading) return;
@@ -38,22 +47,29 @@ export default function WarRoomModal({
       onClick={onClose}
     >
       <div
-        className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-signal-high/40 bg-ink-800 shadow-glow-red"
+        className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border border-signal-high/40 bg-ink-800 shadow-glow-red"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 flex items-center justify-between border-b border-ink-500/60 bg-ink-800 px-5 py-3">
+        <div className="flex items-center justify-between border-b border-ink-500/60 bg-ink-800 px-5 py-3">
           <h2 className="font-mono text-xs uppercase tracking-widest text-signal-high">
             ⚔ War Room
           </h2>
-          <button
-            onClick={onClose}
-            className="rounded border border-ink-500 px-2 py-0.5 font-mono text-xs text-slate-400 hover:text-slate-100"
-          >
-            esc ✕
-          </button>
+          <div className="flex items-center gap-1.5">
+            {!loading &&
+              plan?.markdown &&
+              !plan.markdown.startsWith("**Error:**") && (
+                <CopyButton text={plan.markdown} />
+              )}
+            <button
+              onClick={onClose}
+              className="rounded border border-ink-500 px-2 py-0.5 font-mono text-xs text-slate-400 hover:text-slate-100"
+            >
+              esc ✕
+            </button>
+          </div>
         </div>
 
-        <div className="space-y-3 px-5 py-4">
+        <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
           <div className="flex flex-col gap-2 sm:flex-row">
             <select
               value={companyId}
@@ -95,18 +111,32 @@ export default function WarRoomModal({
             ))}
           </div>
 
-          <div className="rounded-lg border border-ink-500/50 bg-ink-900/40 px-4 py-3">
-            {loading ? (
+          <div
+            ref={planRef}
+            className="max-h-[55vh] overflow-y-auto rounded-lg border border-ink-500/50 bg-ink-900/40 px-4 py-3"
+          >
+            {loading && !plan?.markdown ? (
               <div className="flex items-center gap-2 py-8 font-mono text-sm text-signal-high">
                 <span className="h-2 w-2 animate-pulseDot rounded-full bg-signal-high" />
                 Drafting attack plan from live intelligence…
               </div>
-            ) : plan ? (
+            ) : plan && plan.markdown ? (
               <>
-                <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-slate-500">
-                  {plan.companyName ?? "Market"} · “{plan.directive}”
+                <p className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                  <span>
+                    {plan.companyName ?? "Market"} · “{plan.directive}”
+                  </span>
+                  {loading && (
+                    <span className="flex items-center gap-1 text-signal-high/80">
+                      <span className="h-1.5 w-1.5 animate-pulseDot rounded-full bg-signal-high" />
+                      streaming
+                    </span>
+                  )}
                 </p>
                 <Markdown source={plan.markdown} />
+                {loading && (
+                  <span className="ml-0.5 inline-block h-3 w-1.5 animate-pulseDot bg-signal-high align-baseline" />
+                )}
               </>
             ) : (
               <p className="py-8 text-center text-sm text-slate-600">

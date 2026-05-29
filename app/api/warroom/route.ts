@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { getCompany, listSignals } from "@/lib/store";
-import { generateAttackPlan } from "@/lib/ai";
+import { streamAttackPlan } from "@/lib/ai";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-// War Room: turn an operator directive + live signals into an attack plan.
+// War Room: stream the attack plan token-by-token as Claude reasons over
+// the live signals. Same SSE shape as /api/battlecard for client reuse.
 export async function POST(req: Request) {
   let body: { directive?: string; companyId?: string };
   try {
@@ -32,10 +33,58 @@ export async function POST(req: Request) {
     }
   }
 
-  try {
-    const markdown = await generateAttackPlan(directive, companyName, signals);
-    return NextResponse.json({ plan: { directive, companyName, markdown } });
-  } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
-  }
+  const encoder = new TextEncoder();
+  const target = companyName;
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let closed = false;
+      const send = (ev: unknown) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`));
+        } catch {
+          closed = true;
+        }
+      };
+
+      let buffer = "";
+      try {
+        for await (const chunk of streamAttackPlan(directive, target, signals)) {
+          if (closed) break;
+          buffer += chunk;
+          send({ type: "delta", text: chunk });
+        }
+        if (!closed) {
+          send({
+            type: "done",
+            plan: {
+              directive,
+              companyName: target,
+              markdown: buffer.trim(),
+            },
+          });
+        }
+      } catch (err) {
+        send({ type: "error", error: (err as Error).message });
+      } finally {
+        if (!closed) {
+          try {
+            controller.close();
+          } catch {
+            // already closed
+          }
+        }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }

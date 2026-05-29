@@ -3,7 +3,14 @@
 import type { Company, Signal, SignalType } from "@/lib/types";
 import { SIGNAL_META } from "@/lib/ui";
 
-const CELL_TYPES: SignalType[] = ["pricing", "product", "hiring", "sentiment"];
+const CELL_TYPES: SignalType[] = [
+  "pricing",
+  "product",
+  "hiring",
+  "sentiment",
+  "funding",
+  "intent",
+];
 
 function Cell({ signals, type }: { signals: Signal[]; type: SignalType }) {
   const hits = signals.filter((s) => s.type === type);
@@ -63,8 +70,12 @@ export default function CompetitorMatrix({
             <tr className="font-mono text-[10px] uppercase tracking-wider text-slate-500">
               <th className="px-4 py-2 font-medium">Company</th>
               {CELL_TYPES.map((t) => (
-                <th key={t} className="px-2 py-2 text-center font-medium">
-                  {SIGNAL_META[t].label.slice(0, 4)}
+                <th
+                  key={t}
+                  className="px-2 py-2 text-center font-medium"
+                  title={SIGNAL_META[t].label}
+                >
+                  {SIGNAL_META[t].label.slice(0, 3)}
                 </th>
               ))}
               <th className="px-2 py-2 font-medium">Momentum</th>

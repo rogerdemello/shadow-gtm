@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import type { Company, Signal, SignalType } from "./types";
+import type { Company, PageType, Signal, SignalType } from "./types";
 import type { SerpResult } from "./brightdata";
 import { id } from "./store";
 import { clip } from "./html";
@@ -54,6 +54,11 @@ const SignalSchema = z.object({
     ),
   recommendedAction: z.string().describe("The concrete next move for sales."),
   sourceUrl: z.string().describe("The URL this signal came from."),
+  quote: z
+    .string()
+    .describe(
+      "VERBATIM quote (≤200 chars) from the source text that proves this signal — copy exactly what's written, do not paraphrase. Empty string only if no single quote captures it.",
+    ),
 });
 
 const ExtractionSchema = z.object({
@@ -74,12 +79,19 @@ Scoring rules:
 - opportunityScore: 0-100. High = a clear, near-term play a rep could run this week.
 - recommendedAction: specific and runnable (e.g. "Launch a migration campaign targeting their SMB customers with a cost-comparison battlecard"), not generic advice.
 
+Evidence rule (non-negotiable): every signal MUST carry a verbatim quote (≤200 chars) copied exactly from the supplied text — the pricing page, the change summary, or a SERP snippet. Do NOT paraphrase. If you cannot find a real quote, omit the signal. This is what makes the intelligence auditable.
+
 Quality bar: 2-5 high-signal items beat 10 noisy ones. Only surface what a sharp analyst would flag. Attribute each signal to the source URL it came from.`;
+
+interface ExtractInputPage {
+  pageType: PageType;
+  url: string;
+  text: string;
+}
 
 interface ExtractInput {
   company: Company;
-  pricingText: string;
-  pricingUrl: string;
+  pages: ExtractInputPage[];
   serp: SerpResult[];
   changeSummary: string | null;
   scanId: string;
@@ -87,7 +99,7 @@ interface ExtractInput {
 
 /** Extract + reason in one structured Claude call. Returns persisted-shape signals. */
 export async function extractSignals(input: ExtractInput): Promise<Signal[]> {
-  const { company, pricingText, pricingUrl, serp, changeSummary, scanId } = input;
+  const { company, pages, serp, changeSummary, scanId } = input;
 
   const serpBlock = serp.length
     ? serp
@@ -99,10 +111,21 @@ export async function extractSignals(input: ExtractInput): Promise<Signal[]> {
     ? `\n## What changed since the last scan\n${changeSummary}\n`
     : "";
 
+  // Split the per-page text budget so a richer homepage doesn't drown the
+  // pricing page — keep total under ~16k chars.
+  const perPageBudget = Math.max(3000, Math.floor(16000 / Math.max(1, pages.length)));
+  const pagesBlock = pages
+    .map(
+      (p) =>
+        `## ${p.pageType.toUpperCase()} page (${p.url})\n${clip(p.text, perPageBudget) || "(page could not be fetched)"}`,
+    )
+    .join("\n\n");
+
+  const primaryUrl = pages[0]?.url || "";
+
   const userContent = `Analyze this competitor: **${company.name}** (${company.domain}).
 ${changeBlock}
-## Pricing / site page (${pricingUrl})
-${clip(pricingText, 10000) || "(page could not be fetched)"}
+${pagesBlock}
 
 ## Live web search signals (news, reviews, forums, hiring)
 ${serpBlock}
@@ -142,7 +165,8 @@ Return structured signals. Use the URLs above as sourceUrl values.`;
     opportunityScore: Math.round(clamp(s.opportunityScore, 0, 100)),
     reasoning: s.reasoning,
     recommendedAction: s.recommendedAction,
-    sourceUrl: s.sourceUrl || pricingUrl,
+    sourceUrl: s.sourceUrl || primaryUrl,
+    quote: (s.quote || "").trim().slice(0, 240) || undefined,
     createdAt: now,
   }));
 }
@@ -154,20 +178,21 @@ const BATTLECARD_SYSTEM = `You are a competitive enablement strategist. Given a 
 - **Outbound angle** (a short, specific cold-email opener a rep can send today)
 Be specific and punchy. No preamble, no closing remarks — just the battlecard.`;
 
+function signalDigest(signals: Signal[]): string {
+  if (!signals.length) return "(no live signals captured yet)";
+  return signals
+    .map(
+      (s) =>
+        `- [${s.type}/${s.impact}, opp ${s.opportunityScore}] ${s.description} — ${s.reasoning}`,
+    )
+    .join("\n");
+}
+
 /** Generate a Markdown battlecard for a company from its signals. */
 export async function generateBattlecard(
   company: Company,
   signals: Signal[],
 ): Promise<string> {
-  const signalBlock = signals.length
-    ? signals
-        .map(
-          (s) =>
-            `- [${s.type}/${s.impact}, opp ${s.opportunityScore}] ${s.description} — ${s.reasoning}`,
-        )
-        .join("\n")
-    : "(no signals captured yet)";
-
   const response = await client().messages.create({
     model: MODEL,
     max_tokens: 4096,
@@ -182,7 +207,7 @@ export async function generateBattlecard(
     messages: [
       {
         role: "user",
-        content: `Competitor: ${company.name} (${company.domain})\n\nSignals:\n${signalBlock}\n\nWrite the battlecard.`,
+        content: `Competitor: ${company.name} (${company.domain})\n\nSignals:\n${signalDigest(signals)}\n\nWrite the battlecard.`,
       },
     ],
   });
@@ -194,6 +219,40 @@ export async function generateBattlecard(
     .trim();
 }
 
+/** Streaming version — yields markdown deltas as Claude generates the card. */
+export async function* streamBattlecard(
+  company: Company,
+  signals: Signal[],
+): AsyncGenerator<string> {
+  const stream = client().messages.stream({
+    model: MODEL,
+    max_tokens: 4096,
+    system: [
+      {
+        type: "text",
+        text: BATTLECARD_SYSTEM,
+        cache_control: { type: "ephemeral" },
+      },
+    ],
+    output_config: { effort: EFFORT },
+    messages: [
+      {
+        role: "user",
+        content: `Competitor: ${company.name} (${company.domain})\n\nSignals:\n${signalDigest(signals)}\n\nWrite the battlecard.`,
+      },
+    ],
+  });
+
+  for await (const event of stream) {
+    if (
+      event.type === "content_block_delta" &&
+      event.delta.type === "text_delta"
+    ) {
+      yield event.delta.text;
+    }
+  }
+}
+
 const WARROOM_SYSTEM = `You are an elite competitive GTM strategist running a "war room" for a B2B SaaS revenue team. Given a target competitor (with live intelligence signals) and the operator's directive, produce a sharp, executable attack plan in Markdown. Sections:
 - **Thesis** (1-2 sentences: the core opening and why now, grounded in the signals)
 - **Exploitable weaknesses** (bullets — quote the specific signals/changes that create them)
@@ -202,16 +261,6 @@ const WARROOM_SYSTEM = `You are an elite competitive GTM strategist running a "w
 - **30-day campaign** (concrete plays across outbound, content, and timing)
 - **Outbound opener** (a short, specific cold-email opener a rep can send today)
 Be aggressive, specific, and grounded in the provided signals — never generic. If the directive names a segment or angle, build the plan around it. No preamble, no caveats — just the plan.`;
-
-function signalDigest(signals: Signal[]): string {
-  if (!signals.length) return "(no live signals captured yet)";
-  return signals
-    .map(
-      (s) =>
-        `- [${s.type}/${s.impact}, opp ${s.opportunityScore}] ${s.description} — ${s.reasoning}`,
-    )
-    .join("\n");
-}
 
 /** War Room: turn a directive + live signals into an executable attack plan. */
 export async function generateAttackPlan(
@@ -249,6 +298,47 @@ export async function generateAttackPlan(
     .map((b) => b.text)
     .join("\n")
     .trim();
+}
+
+/** Streaming attack plan — same shape, but yields markdown chunks as they land. */
+export async function* streamAttackPlan(
+  directive: string,
+  companyName: string | null,
+  signals: Signal[],
+): AsyncGenerator<string> {
+  const target = companyName
+    ? `Target competitor: ${companyName}`
+    : "Target: the overall competitive set";
+
+  const stream = client().messages.stream({
+    model: MODEL,
+    max_tokens: 4096,
+    system: [
+      {
+        type: "text",
+        text: WARROOM_SYSTEM,
+        cache_control: { type: "ephemeral" },
+      },
+    ],
+    output_config: { effort: EFFORT },
+    messages: [
+      {
+        role: "user",
+        content: `${target}\n\nOperator directive: "${directive}"\n\nLive intelligence signals:\n${signalDigest(
+          signals,
+        )}\n\nWrite the attack plan.`,
+      },
+    ],
+  });
+
+  for await (const event of stream) {
+    if (
+      event.type === "content_block_delta" &&
+      event.delta.type === "text_delta"
+    ) {
+      yield event.delta.text;
+    }
+  }
 }
 
 function clamp(n: number, lo: number, hi: number): number {

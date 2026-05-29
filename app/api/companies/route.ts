@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { addCompany, listCompanies } from "@/lib/store";
+import { addCompany, DuplicateCompanyError, listCompanies } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,11 +30,18 @@ export async function POST(req: Request) {
     );
   }
 
-  const company = await addCompany({
-    name,
-    domain,
-    pricingUrl: body.pricingUrl,
-    renderJs: body.renderJs,
-  });
-  return NextResponse.json({ company }, { status: 201 });
+  try {
+    const company = await addCompany({
+      name,
+      domain,
+      pricingUrl: body.pricingUrl,
+      renderJs: body.renderJs,
+    });
+    return NextResponse.json({ company }, { status: 201 });
+  } catch (err) {
+    if (err instanceof DuplicateCompanyError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
+    throw err;
+  }
 }

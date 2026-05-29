@@ -6,7 +6,7 @@ import {
   listSignals,
   saveBattlecard,
 } from "@/lib/store";
-import { generateBattlecard } from "@/lib/ai";
+import { streamBattlecard } from "@/lib/ai";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +21,9 @@ export async function GET(req: Request) {
   return NextResponse.json({ battlecard: card ?? null });
 }
 
+// SSE-streaming battlecard generation. The client receives markdown deltas as
+// they leave the model, then a final {type:"done", battlecard} event with the
+// persisted artifact.
 export async function POST(req: Request) {
   let body: { companyId?: string };
   try {
@@ -39,19 +42,58 @@ export async function POST(req: Request) {
   }
 
   const signals = (await listSignals()).filter((s) => s.companyId === companyId);
+  const encoder = new TextEncoder();
 
-  try {
-    const markdown = await generateBattlecard(company, signals);
-    const card = {
-      id: newId(),
-      companyId,
-      companyName: company.name,
-      markdown,
-      createdAt: new Date().toISOString(),
-    };
-    await saveBattlecard(card);
-    return NextResponse.json({ battlecard: card });
-  } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
-  }
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let closed = false;
+      const send = (ev: unknown) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`));
+        } catch {
+          closed = true;
+        }
+      };
+
+      let buffer = "";
+      try {
+        for await (const chunk of streamBattlecard(company, signals)) {
+          if (closed) break;
+          buffer += chunk;
+          send({ type: "delta", text: chunk });
+        }
+        if (!closed) {
+          const card = {
+            id: newId(),
+            companyId,
+            companyName: company.name,
+            markdown: buffer.trim(),
+            createdAt: new Date().toISOString(),
+          };
+          await saveBattlecard(card);
+          send({ type: "done", battlecard: card });
+        }
+      } catch (err) {
+        send({ type: "error", error: (err as Error).message });
+      } finally {
+        if (!closed) {
+          try {
+            controller.close();
+          } catch {
+            // already closed
+          }
+        }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }

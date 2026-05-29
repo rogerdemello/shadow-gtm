@@ -25,20 +25,28 @@ score and a one-click battlecard.
 
 - **Watchlist** of competitors (add by name + domain).
 - **Run intelligence scan** — for each competitor, in a live-updating feed:
-  - fetches its pricing/site page through **Bright Data Web Unlocker**,
+  - fetches the **pricing page _and_ homepage** through **Bright Data Web Unlocker**,
   - pulls live news / reviews / hiring / intent chatter through **Bright Data SERP API**,
-  - diffs the page against the previous scan to surface *what changed*,
+  - diffs each page against the previous scan to surface *what changed*,
   - asks Claude to extract discrete **signals** (pricing, product, hiring,
     sentiment, funding, messaging, intent, risk) and — the differentiator —
     **reason about why each one matters** and what play to run.
+- **Auditable evidence** — every signal carries a **verbatim quote** from the
+  source. Click any signal to open an Evidence panel showing the quote, the
+  change summary, the SERP results, and the exact URLs we monitored. The AI
+  can't hand-wave; if there's no quote, there's no signal.
 - **Competitor matrix** — signal density + momentum per competitor.
 - **AI recommended plays** — every signal ranked by opportunity score.
-- **Battlecards** — one click turns a competitor's signals into a Markdown sales
-  battlecard (why we win / their weaknesses / objection handling / outbound angle).
-- **War Room** — type an attack directive ("Attack HubSpot in the SMB market")
-  and Claude turns the live signals into an executable plan: thesis, exploitable
-  weaknesses, pricing/positioning gaps, who to hit first, a 30-day campaign, and
-  an outbound opener.
+- **Streaming battlecards** — one click and Claude streams a Markdown sales
+  battlecard (why we win / their weaknesses / objection handling / outbound
+  angle) token-by-token into the dashboard.
+- **Streaming War Room** — type an attack directive ("Attack HubSpot in the
+  SMB market") and Claude streams a full attack plan from the live signals:
+  thesis, exploitable weaknesses, pricing/positioning gaps, who to hit first,
+  a 30-day campaign, and an outbound opener.
+- **One-click demo** — hit *✦ Try with demo data* on an empty dashboard to
+  load a curated bundle (HubSpot / Clay / Apollo with 9 hand-crafted signals,
+  evidence, and a pre-baked battlecard). No keys required to explore the UI.
 
 ## Bright Data integration (required)
 
@@ -57,8 +65,9 @@ Scraping Browser connects to a remote Chrome over a WebSocket CDP endpoint.
 - **Next.js 16** (App Router, TypeScript) — UI + API routes, one deployable app.
 - **Claude** via `@anthropic-ai/sdk` — `claude-opus-4-7` by default. Signal
   extraction uses **structured outputs** (`messages.parse` + Zod) so every signal
-  is typed and ranked; battlecards use a second free-text call. System prompts are
-  cache-friendly (`cache_control`).
+  is typed, ranked, and carries a verbatim quote. Battlecards and War Room
+  plans are **streamed** via `messages.stream()` and piped to the client as
+  Server-Sent Events. System prompts are cache-friendly (`cache_control`).
 - **Tailwind CSS** — dark "war-room" terminal UI.
 - **Zero-DB persistence** — a small JSON store (`lib/store.ts`) behind a clean
   interface, so swapping in Postgres/Turso for production is a one-file change.
@@ -103,15 +112,18 @@ Claude call still needs `ANTHROPIC_API_KEY`.
 
 ## Demo script (≈90s)
 
-1. Add competitors (preset chips: HubSpot, Clay, Apollo, Gong).
-2. Hit **Run intelligence scan** — watch signals stream into the live feed as
-   Bright Data fetches each site and Claude reasons over it.
-3. Point at a signal's **"why it matters"** line — that's the intelligence, not
-   the scrape.
+1. Land on the empty dashboard → hit **✦ Try with demo data**. Three
+   competitors and a curated feed appear in under a second.
+2. Click any signal → the **Evidence panel** opens with the verbatim quote
+   from the source, the diff vs. the previous scan, the SERP results, and the
+   exact URLs Bright Data fetched. *The intelligence is auditable.*
+3. Hit **Run intelligence scan** — Bright Data fetches each competitor's
+   pricing **and** homepage; results stream in live as Claude reasons.
 4. Show the **AI recommended plays** ranked by opportunity score.
-5. Click **Battlecard** on a competitor → live-generated sales enablement.
+5. Click **Battlecard** on a competitor → watch Claude **stream** the sales
+   enablement Markdown directly into the dashboard.
 6. Open **⚔ War Room**, type *"Attack HubSpot in the SMB market"* → a full,
-   signal-grounded attack plan. (The closer.)
+   signal-grounded attack plan **streams in** token-by-token. (The closer.)
 
 ## Repo layout
 
@@ -122,14 +134,18 @@ app/
     state/                 # hydrate dashboard (companies, signals, config)
     companies/             # add / list / remove watchlist
     scan/stream/           # live SSE scan — streams the feed in as each company completes
-    battlecard/            # generate / fetch battlecards
-    warroom/               # generate an attack plan from live signals
-components/                # dashboard, feed, matrix, recommendations, battlecard, war room
+    battlecard/            # streamed battlecard generation (SSE) + stored-card fetch
+    warroom/               # streamed attack-plan generation (SSE)
+    evidence/              # per-company evidence (sources, SERP, change summary)
+    seed/                  # one-click demo data
+components/                # dashboard, feed, matrix, recs, battlecard, war room, evidence
 lib/
   brightdata.ts            # Bright Data: Web Unlocker + SERP API + Scraping Browser
-  ai.ts                    # Claude: structured signal extraction + battlecards
+  ai.ts                    # Claude: structured signal extraction + streamed outputs
   workflow.ts              # the core scan loop (collect → diff → reason → store)
   store.ts                 # JSON persistence behind a swappable interface
+  sse.ts                   # client-side POST-SSE parser
+  seed.ts                  # curated demo bundle
   html.ts / mock.ts / ui.ts / types.ts
 ```
 

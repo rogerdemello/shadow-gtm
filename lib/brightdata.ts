@@ -6,6 +6,7 @@ import {
   scrapingBrowserConfigured as envScrapingBrowserConfigured,
 } from "./env";
 import { logger } from "./logger";
+import { withRetry, isTransient } from "./retry";
 
 const log = logger.child({ module: "brightdata" });
 
@@ -40,7 +41,7 @@ function isMock(): boolean {
   return isMockMode();
 }
 
-async function brdRequest(zone: string, url: string): Promise<string> {
+async function brdAttempt(zone: string, url: string): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -61,18 +62,26 @@ async function brdRequest(zone: string, url: string): Promise<string> {
     }
     return body;
   } catch (err) {
-    if (err instanceof BrightDataError) {
-      log.warn("Bright Data request returned an error", { zone, url, error: err.message });
-      throw err;
-    }
+    if (err instanceof BrightDataError) throw err;
     if ((err as Error).name === "AbortError") {
-      log.warn("Bright Data request timed out", { zone, url, timeoutMs: TIMEOUT_MS });
       throw new BrightDataError(`Bright Data request timed out after ${TIMEOUT_MS}ms`);
     }
-    log.error("Bright Data request failed", err, { zone, url });
     throw new BrightDataError(`Bright Data request failed: ${(err as Error).message}`);
   } finally {
     clearTimeout(timer);
+  }
+}
+
+// Retry transient failures (timeouts, 429, 5xx); fail fast on 4xx auth/bad-zone.
+async function brdRequest(zone: string, url: string): Promise<string> {
+  try {
+    return await withRetry(() => brdAttempt(zone, url), {
+      label: `brightdata:${zone}`,
+      shouldRetry: isTransient,
+    });
+  } catch (err) {
+    log.error("Bright Data request failed after retries", err, { zone, url });
+    throw err;
   }
 }
 

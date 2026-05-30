@@ -24,7 +24,7 @@ export async function GET() {
   lines.push(`*Generated ${today} · ${companies.length} competitors · ${signals.length} signals*`);
   lines.push("");
   lines.push(
-    `> Powered by live web data via [Bright Data](https://brightdata.com) and reasoning via [Claude](https://www.anthropic.com/claude).`,
+    `> Powered by live web data via [Bright Data](https://brightdata.com) and reasoning via [Gemini](https://ai.google.dev/gemini-api).`,
   );
   lines.push("");
 

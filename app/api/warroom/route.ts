@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-// War Room: stream the attack plan token-by-token as Claude reasons over
+// War Room: stream the attack plan token-by-token as Gemini reasons over
 // the live signals. Same SSE shape as /api/battlecard for client reuse.
 export async function POST(req: Request) {
   let body: { directive?: string; companyId?: string };

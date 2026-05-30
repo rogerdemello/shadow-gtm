@@ -7,7 +7,7 @@ import type {
 import { id } from "./store";
 
 // Hand-curated sample data. Drives the "Load demo" button so judges can see a
-// fully populated dashboard without configuring Bright Data / Anthropic keys.
+// fully populated dashboard without configuring Bright Data / Gemini keys.
 // Numbers and quotes are illustrative — not scraped — so the experience is
 // reproducible. Stories are believable and demo-friendly.
 

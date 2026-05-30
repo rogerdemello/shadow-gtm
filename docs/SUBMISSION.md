@@ -34,11 +34,11 @@ HubSpot in the SMB market"* into a full, signal-grounded attack plan.
 Each scan diffs a competitor's page against the previous run to detect *what
 changed*, then feeds everything to the model.
 
-**How the AI is used.** Claude (`claude-opus-4-7`) extracts discrete, typed,
-scored signals **and** reasons about why each one matters — the second-order
-implication and the recommended play — in a single structured-output pass.
-Battlecards and War Room plans are generated on demand. System prompts are
-prompt-cached.
+**How the AI is used.** Google's Gemini (`gemini-2.5-flash`) extracts discrete,
+typed, scored signals **and** reasons about why each one matters — the
+second-order implication and the recommended play — in a single
+structured-output pass (`responseSchema`). Battlecards and War Room plans are
+streamed on demand.
 
 **Why it's different.** Most tools summarize or scrape. Shadow GTM *reasons and
 acts*: it explains why a change matters, scores the opportunity, and hands the
@@ -53,8 +53,8 @@ Built in 5 days as a Next.js full-stack app. MIT-licensed.
 
 ## Technology & Category Tags
 AI Agents · GTM Intelligence · Competitive Intelligence · Sales Intelligence ·
-Bright Data · Web Unlocker · SERP API · Scraping Browser · Claude ·
-Anthropic · Next.js · TypeScript · Real-time Web Data
+Bright Data · Web Unlocker · SERP API · Scraping Browser · Gemini ·
+Google AI · Next.js · TypeScript · Real-time Web Data
 
 ## Links
 - **GitHub:** https://github.com/rogerdemello/shadow-gtm

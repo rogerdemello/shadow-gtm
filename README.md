@@ -2,7 +2,7 @@
 
 **Autonomous web intelligence for revenue teams.** Shadow GTM watches the live
 web through [Bright Data](https://brightdata.com), reasons over what it finds
-with Claude, and turns competitor movement into **ranked, explained GTM plays** —
+with Google's Gemini, and turns competitor movement into **ranked, explained GTM plays** —
 not another summarizer, an analyst.
 
 > Built for the **Web Data UNLOCKED Hackathon** (Bright Data × lablab.ai) —
@@ -28,7 +28,7 @@ score and a one-click battlecard.
   - fetches the **pricing page _and_ homepage** through **Bright Data Web Unlocker**,
   - pulls live news / reviews / hiring / intent chatter through **Bright Data SERP API**,
   - diffs each page against the previous scan to surface *what changed*,
-  - asks Claude to extract discrete **signals** (pricing, product, hiring,
+  - asks Gemini to extract discrete **signals** (pricing, product, hiring,
     sentiment, funding, messaging, intent, risk) and — the differentiator —
     **reason about why each one matters** and what play to run.
 - **Auditable evidence** — every signal carries a **verbatim quote** from the
@@ -37,11 +37,11 @@ score and a one-click battlecard.
   can't hand-wave; if there's no quote, there's no signal.
 - **Competitor matrix** — signal density + momentum per competitor.
 - **AI recommended plays** — every signal ranked by opportunity score.
-- **Streaming battlecards** — one click and Claude streams a Markdown sales
+- **Streaming battlecards** — one click and Gemini streams a Markdown sales
   battlecard (why we win / their weaknesses / objection handling / outbound
   angle) token-by-token into the dashboard.
 - **Streaming War Room** — type an attack directive ("Attack HubSpot in the
-  SMB market") and Claude streams a full attack plan from the live signals:
+  SMB market") and Gemini streams a full attack plan from the live signals:
   thesis, exploitable weaknesses, pricing/positioning gaps, who to hit first,
   a 30-day campaign, and an outbound opener.
 - **One-click demo** — hit *✦ Try with demo data* on an empty dashboard to
@@ -63,11 +63,11 @@ Scraping Browser connects to a remote Chrome over a WebSocket CDP endpoint.
 ## Tech
 
 - **Next.js 16** (App Router, TypeScript) — UI + API routes, one deployable app.
-- **Claude** via `@anthropic-ai/sdk` — `claude-opus-4-7` by default. Signal
-  extraction uses **structured outputs** (`messages.parse` + Zod) so every signal
-  is typed, ranked, and carries a verbatim quote. Battlecards and War Room
-  plans are **streamed** via `messages.stream()` and piped to the client as
-  Server-Sent Events. System prompts are cache-friendly (`cache_control`).
+- **Gemini** via `@google/genai` — `gemini-2.5-flash` by default. Signal
+  extraction uses **structured outputs** (`responseSchema` + Zod validation) so
+  every signal is typed, ranked, and carries a verbatim quote. Battlecards and
+  War Room plans are **streamed** via `generateContentStream()` and piped to the
+  client as Server-Sent Events.
 - **Tailwind CSS** — dark "war-room" terminal UI.
 - **Zero-DB persistence** — a small JSON store (`lib/store.ts`) behind a clean
   interface, so swapping in Postgres/Turso for production is a one-file change.
@@ -91,9 +91,9 @@ BRIGHTDATA_API_TOKEN=...        # Bright Data dashboard → Account settings →
 BRIGHTDATA_UNLOCKER_ZONE=web_unlocker1   # name of your Web Unlocker zone
 BRIGHTDATA_SERP_ZONE=serp_api1           # name of your SERP API zone
 BRIGHTDATA_BROWSER_WS=wss://...          # Scraping Browser CDP endpoint (optional)
-ANTHROPIC_API_KEY=...
-ANTHROPIC_MODEL=claude-opus-4-7          # claude-sonnet-4-6 is ~2x faster for live demos
-ANTHROPIC_EFFORT=medium                  # low | medium | high | max
+GEMINI_API_KEY=...                       # Google AI Studio → https://aistudio.google.com/apikey
+GEMINI_MODEL=gemini-2.5-flash            # gemini-2.5-pro for deeper reasoning (slower)
+GEMINI_THINKING_BUDGET=                  # optional token cap; 0 disables thinking
 ```
 
 Create the zones in the Bright Data dashboard (Proxies & Scraping Infra →
@@ -106,7 +106,7 @@ add a **Scraping Browser** zone and paste its `wss://…` connection string into
 
 Set `SHADOW_GTM_MOCK=1` (or just leave `BRIGHTDATA_API_TOKEN` empty) to run scans
 against built-in sample pages — useful for UI work without spending credits. The
-Claude call still needs `ANTHROPIC_API_KEY`.
+Gemini call still needs `GEMINI_API_KEY`.
 
 ---
 
@@ -118,9 +118,9 @@ Claude call still needs `ANTHROPIC_API_KEY`.
    from the source, the diff vs. the previous scan, the SERP results, and the
    exact URLs Bright Data fetched. *The intelligence is auditable.*
 3. Hit **Run intelligence scan** — Bright Data fetches each competitor's
-   pricing **and** homepage; results stream in live as Claude reasons.
+   pricing **and** homepage; results stream in live as Gemini reasons.
 4. Show the **AI recommended plays** ranked by opportunity score.
-5. Click **Battlecard** on a competitor → watch Claude **stream** the sales
+5. Click **Battlecard** on a competitor → watch Gemini **stream** the sales
    enablement Markdown directly into the dashboard.
 6. Open **⚔ War Room**, type *"Attack HubSpot in the SMB market"* → a full,
    signal-grounded attack plan **streams in** token-by-token. (The closer.)
@@ -141,7 +141,7 @@ app/
 components/                # dashboard, feed, matrix, recs, battlecard, war room, evidence
 lib/
   brightdata.ts            # Bright Data: Web Unlocker + SERP API + Scraping Browser
-  ai.ts                    # Claude: structured signal extraction + streamed outputs
+  ai.ts                    # Gemini: structured signal extraction + streamed outputs
   workflow.ts              # the core scan loop (collect → diff → reason → store)
   store.ts                 # JSON persistence behind a swappable interface
   sse.ts                   # client-side POST-SSE parser

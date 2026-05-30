@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { listCompanies, listSignals } from "@/lib/store";
 import { brightDataConfigured, scrapingBrowserConfigured } from "@/lib/brightdata";
-import { anthropicConfigured } from "@/lib/ai";
+import { geminiConfigured } from "@/lib/ai";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ export async function GET() {
     config: {
       brightData: brightDataConfigured(),
       scrapingBrowser: scrapingBrowserConfigured(),
-      anthropic: anthropicConfigured(),
+      gemini: geminiConfigured(),
       mock: process.env.SHADOW_GTM_MOCK === "1" || !process.env.BRIGHTDATA_API_TOKEN,
     },
   });

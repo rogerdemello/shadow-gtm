@@ -20,7 +20,7 @@ interface AttackPlan {
 
 interface Config {
   brightData: boolean;
-  anthropic: boolean;
+  gemini: boolean;
   mock: boolean;
   scrapingBrowser: boolean;
 }
@@ -465,7 +465,7 @@ export default function Dashboard() {
             ok={config?.brightData ?? false}
             text={config?.mock ? "Bright Data · MOCK" : "Bright Data · LIVE"}
           />
-          <Pill ok={config?.anthropic ?? false} text="Claude · key" />
+          <Pill ok={config?.gemini ?? false} text="Gemini · key" />
         </span>
       </div>
 
@@ -559,12 +559,12 @@ export default function Dashboard() {
           </a>{" "}
           · reasoning ·{" "}
           <a
-            href="https://www.anthropic.com/claude"
+            href="https://ai.google.dev/gemini-api"
             target="_blank"
             rel="noreferrer"
             className="text-slate-400 hover:text-accent"
           >
-            Claude
+            Gemini
           </a>
         </span>
         <span>Shadow GTM · for the Web Data UNLOCKED hackathon</span>

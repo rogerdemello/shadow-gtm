@@ -20,7 +20,7 @@ Judging: *Application of Technology · Presentation · Business Value · Origina
 - And every "AI competitive intel" tool today asks you to **trust a black box.**
 
 ### 3 — The Insight
-- **Bright Data solves access. Claude solves interpretation.**
+- **Bright Data solves access. Gemini solves interpretation.**
 - One loop: **live signal → AI reasoning → a play a rep can run today —
   with a quote from the source.**
 - Big visual of the pipeline.
@@ -38,15 +38,15 @@ Judging: *Application of Technology · Presentation · Business Value · Origina
   a **Battlecard** → close on **War Room**.
 
 ### 6 — How It Works  *(Application of Technology — the Bright Data slide)*
-- Diagram: **Live web → Bright Data → diff vs last scan → Claude → ranked plays
+- Diagram: **Live web → Bright Data → diff vs last scan → Gemini → ranked plays
   + verbatim quotes.**
 - **Bright Data (required, 3 products):**
   - **Web Unlocker** — competitor pricing + homepage, past bot detection.
   - **SERP API** — structured news / reviews / buying-intent search.
   - **Scraping Browser** — JS-heavy/interactive sites (e.g. LinkedIn) via CDP.
-- **Claude (`claude-opus-4-7`)** — structured signal extraction (typed + scored
+- **Gemini (`gemini-2.5-flash`)** — structured signal extraction (typed + scored
   + quoted) *and* strategic reasoning, in one pass; battlecards and war-room
-  plans **stream** via `messages.stream` over Server-Sent Events.
+  plans **stream** via `generateContentStream` over Server-Sent Events.
 
 ### 7 — Why It's Different  *(Originality)*
 - Most hackathon tools **summarize or scrape**. Shadow GTM **reasons, acts,
@@ -70,7 +70,7 @@ Judging: *Application of Technology · Presentation · Business Value · Origina
 - Pricing sketch: Startup $99 · Growth $499 · Enterprise $5k+/mo.
 
 ### 9 — Built in 5 Days
-- Next.js 16 full-stack · Claude (`@anthropic-ai/sdk`, structured outputs +
+- Next.js 16 full-stack · Gemini (`@google/genai`, structured outputs +
   streaming) · Bright Data (3 products) · SSE everywhere (scan, battlecard,
   war room) · zero-DB swappable persistence.
 - Production-shaped: typed end-to-end, graceful failure, deployable.

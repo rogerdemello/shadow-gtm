@@ -1,30 +1,34 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { GoogleGenAI, Type } from "@google/genai";
 import { z } from "zod";
 import type { Company, PageType, Signal, SignalType } from "./types";
 import type { SerpResult } from "./brightdata";
 import { id } from "./store";
 import { clip } from "./html";
 
-// ── Claude integration ──────────────────────────────────────────────────────
+// ── Gemini integration ──────────────────────────────────────────────────────
 // One structured call per company turns scraped web text into fully-reasoned
 // GTM signals (the extraction + reasoning layers folded into a single pass to
 // keep the live scan responsive). A second free-text call generates battlecards
-// on demand. System prompts are stable and cache-friendly.
+// on demand. System prompts are stable and supplied via systemInstruction.
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-7";
-const EFFORT = (process.env.ANTHROPIC_EFFORT || "medium") as
-  | "low"
-  | "medium"
-  | "high"
-  | "max";
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
-let _client: Anthropic | null = null;
-function client(): Anthropic {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error("ANTHROPIC_API_KEY is not set");
+// Optional thinking-budget override (tokens). Gemini 2.5 decides dynamically by
+// default; set GEMINI_THINKING_BUDGET=0 to disable thinking for the snappiest
+// live demo, or a positive number to cap it. Left unset → model default.
+function thinkingConfig(): { thinkingBudget: number } | undefined {
+  const raw = process.env.GEMINI_THINKING_BUDGET;
+  if (raw === undefined || raw === "") return undefined;
+  const n = Number(raw);
+  return Number.isNaN(n) ? undefined : { thinkingBudget: n };
+}
+
+let _client: GoogleGenAI | null = null;
+function client(): GoogleGenAI {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is not set");
   }
-  return (_client ??= new Anthropic());
+  return (_client ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }));
 }
 
 // ── Structured signal schema ────────────────────────────────────────────────
@@ -39,6 +43,7 @@ const SIGNAL_TYPES: [SignalType, ...SignalType[]] = [
   "risk",
 ];
 
+// Zod schema — used to validate + type the JSON Gemini returns.
 const SignalSchema = z.object({
   type: z.enum(SIGNAL_TYPES),
   description: z.string().describe("One line: what was observed."),
@@ -65,8 +70,67 @@ const ExtractionSchema = z.object({
   signals: z.array(SignalSchema),
 });
 
-// Frozen system prompt → cacheable prefix (engages once it exceeds the model's
-// min cacheable size; harmless below it).
+// Gemini structured-output schema — mirrors the Zod schema above. Gemini honours
+// `responseMimeType: application/json` + this schema to force valid JSON out.
+const SIGNAL_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    type: { type: Type.STRING, enum: SIGNAL_TYPES as unknown as string[] },
+    description: { type: Type.STRING, description: "One line: what was observed." },
+    impact: { type: Type.STRING, enum: ["high", "medium", "low"] },
+    confidence: { type: Type.NUMBER, description: "0-1: how sure this signal is real." },
+    opportunityScore: {
+      type: Type.NUMBER,
+      description: "0-100: size of the GTM opportunity this opens.",
+    },
+    reasoning: {
+      type: Type.STRING,
+      description: "WHY it matters — the second-order implication, not a restatement.",
+    },
+    recommendedAction: {
+      type: Type.STRING,
+      description: "The concrete next move for sales.",
+    },
+    sourceUrl: { type: Type.STRING, description: "The URL this signal came from." },
+    quote: {
+      type: Type.STRING,
+      description:
+        "VERBATIM quote (≤200 chars) copied exactly from the source text. Empty string only if no single quote captures it.",
+    },
+  },
+  required: [
+    "type",
+    "description",
+    "impact",
+    "confidence",
+    "opportunityScore",
+    "reasoning",
+    "recommendedAction",
+    "sourceUrl",
+    "quote",
+  ],
+  propertyOrdering: [
+    "type",
+    "description",
+    "impact",
+    "confidence",
+    "opportunityScore",
+    "reasoning",
+    "recommendedAction",
+    "sourceUrl",
+    "quote",
+  ],
+} as const;
+
+const EXTRACTION_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    signals: { type: Type.ARRAY, items: SIGNAL_RESPONSE_SCHEMA },
+  },
+  required: ["signals"],
+} as const;
+
+// Frozen system prompt — stable across calls.
 const ANALYST_SYSTEM = `You are a senior GTM (go-to-market) intelligence analyst for a B2B SaaS revenue team. You read live web data about a competitor and surface ACTIONABLE intelligence for sales, marketing, and RevOps.
 
 Your job is two steps, fused into one structured output:
@@ -97,7 +161,7 @@ interface ExtractInput {
   scanId: string;
 }
 
-/** Extract + reason in one structured Claude call. Returns persisted-shape signals. */
+/** Extract + reason in one structured Gemini call. Returns persisted-shape signals. */
 export async function extractSignals(input: ExtractInput): Promise<Signal[]> {
   const { company, pages, serp, changeSummary, scanId } = input;
 
@@ -132,25 +196,27 @@ ${serpBlock}
 
 Return structured signals. Use the URLs above as sourceUrl values.`;
 
-  const response = await client().messages.parse({
+  const response = await client().models.generateContent({
     model: MODEL,
-    max_tokens: 4096,
-    system: [
-      {
-        type: "text",
-        text: ANALYST_SYSTEM,
-        cache_control: { type: "ephemeral" },
-      },
-    ],
-    output_config: {
-      effort: EFFORT,
-      format: zodOutputFormat(ExtractionSchema),
+    contents: userContent,
+    config: {
+      systemInstruction: ANALYST_SYSTEM,
+      responseMimeType: "application/json",
+      responseSchema: EXTRACTION_RESPONSE_SCHEMA,
+      maxOutputTokens: 8192,
+      ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
     },
-    messages: [{ role: "user", content: userContent }],
   });
 
-  const parsed = response.parsed_output;
-  if (!parsed) return [];
+  const raw = response.text;
+  if (!raw) return [];
+
+  let parsed: z.infer<typeof ExtractionSchema>;
+  try {
+    parsed = ExtractionSchema.parse(JSON.parse(raw));
+  } catch {
+    return [];
+  }
 
   const now = new Date().toISOString();
   return parsed.signals.map((s) => ({
@@ -193,63 +259,37 @@ export async function generateBattlecard(
   company: Company,
   signals: Signal[],
 ): Promise<string> {
-  const response = await client().messages.create({
+  const response = await client().models.generateContent({
     model: MODEL,
-    max_tokens: 4096,
-    system: [
-      {
-        type: "text",
-        text: BATTLECARD_SYSTEM,
-        cache_control: { type: "ephemeral" },
-      },
-    ],
-    output_config: { effort: EFFORT },
-    messages: [
-      {
-        role: "user",
-        content: `Competitor: ${company.name} (${company.domain})\n\nSignals:\n${signalDigest(signals)}\n\nWrite the battlecard.`,
-      },
-    ],
+    contents: `Competitor: ${company.name} (${company.domain})\n\nSignals:\n${signalDigest(signals)}\n\nWrite the battlecard.`,
+    config: {
+      systemInstruction: BATTLECARD_SYSTEM,
+      maxOutputTokens: 4096,
+      ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
+    },
   });
 
-  return response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("\n")
-    .trim();
+  return (response.text || "").trim();
 }
 
-/** Streaming version — yields markdown deltas as Claude generates the card. */
+/** Streaming version — yields markdown deltas as Gemini generates the card. */
 export async function* streamBattlecard(
   company: Company,
   signals: Signal[],
 ): AsyncGenerator<string> {
-  const stream = client().messages.stream({
+  const stream = await client().models.generateContentStream({
     model: MODEL,
-    max_tokens: 4096,
-    system: [
-      {
-        type: "text",
-        text: BATTLECARD_SYSTEM,
-        cache_control: { type: "ephemeral" },
-      },
-    ],
-    output_config: { effort: EFFORT },
-    messages: [
-      {
-        role: "user",
-        content: `Competitor: ${company.name} (${company.domain})\n\nSignals:\n${signalDigest(signals)}\n\nWrite the battlecard.`,
-      },
-    ],
+    contents: `Competitor: ${company.name} (${company.domain})\n\nSignals:\n${signalDigest(signals)}\n\nWrite the battlecard.`,
+    config: {
+      systemInstruction: BATTLECARD_SYSTEM,
+      maxOutputTokens: 4096,
+      ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
+    },
   });
 
-  for await (const event of stream) {
-    if (
-      event.type === "content_block_delta" &&
-      event.delta.type === "text_delta"
-    ) {
-      yield event.delta.text;
-    }
+  for await (const chunk of stream) {
+    const text = chunk.text;
+    if (text) yield text;
   }
 }
 
@@ -272,32 +312,19 @@ export async function generateAttackPlan(
     ? `Target competitor: ${companyName}`
     : "Target: the overall competitive set";
 
-  const response = await client().messages.create({
+  const response = await client().models.generateContent({
     model: MODEL,
-    max_tokens: 4096,
-    system: [
-      {
-        type: "text",
-        text: WARROOM_SYSTEM,
-        cache_control: { type: "ephemeral" },
-      },
-    ],
-    output_config: { effort: EFFORT },
-    messages: [
-      {
-        role: "user",
-        content: `${target}\n\nOperator directive: "${directive}"\n\nLive intelligence signals:\n${signalDigest(
-          signals,
-        )}\n\nWrite the attack plan.`,
-      },
-    ],
+    contents: `${target}\n\nOperator directive: "${directive}"\n\nLive intelligence signals:\n${signalDigest(
+      signals,
+    )}\n\nWrite the attack plan.`,
+    config: {
+      systemInstruction: WARROOM_SYSTEM,
+      maxOutputTokens: 4096,
+      ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
+    },
   });
 
-  return response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("\n")
-    .trim();
+  return (response.text || "").trim();
 }
 
 /** Streaming attack plan — same shape, but yields markdown chunks as they land. */
@@ -310,34 +337,21 @@ export async function* streamAttackPlan(
     ? `Target competitor: ${companyName}`
     : "Target: the overall competitive set";
 
-  const stream = client().messages.stream({
+  const stream = await client().models.generateContentStream({
     model: MODEL,
-    max_tokens: 4096,
-    system: [
-      {
-        type: "text",
-        text: WARROOM_SYSTEM,
-        cache_control: { type: "ephemeral" },
-      },
-    ],
-    output_config: { effort: EFFORT },
-    messages: [
-      {
-        role: "user",
-        content: `${target}\n\nOperator directive: "${directive}"\n\nLive intelligence signals:\n${signalDigest(
-          signals,
-        )}\n\nWrite the attack plan.`,
-      },
-    ],
+    contents: `${target}\n\nOperator directive: "${directive}"\n\nLive intelligence signals:\n${signalDigest(
+      signals,
+    )}\n\nWrite the attack plan.`,
+    config: {
+      systemInstruction: WARROOM_SYSTEM,
+      maxOutputTokens: 4096,
+      ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
+    },
   });
 
-  for await (const event of stream) {
-    if (
-      event.type === "content_block_delta" &&
-      event.delta.type === "text_delta"
-    ) {
-      yield event.delta.text;
-    }
+  for await (const chunk of stream) {
+    const text = chunk.text;
+    if (text) yield text;
   }
 }
 
@@ -346,6 +360,6 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
-export function anthropicConfigured(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+export function geminiConfigured(): boolean {
+  return Boolean(process.env.GEMINI_API_KEY);
 }

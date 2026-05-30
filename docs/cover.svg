@@ -51,5 +51,5 @@
 
   <!-- footer -->
   <text x="80" y="566" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="18" fill="#7a8699">live web  &#8594;  AI reasoning  &#8594;  the play</text>
-  <text x="1120" y="566" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="18" fill="#7a8699" text-anchor="end">Bright Data  &#215;  Claude</text>
+  <text x="1120" y="566" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="18" fill="#7a8699" text-anchor="end">Bright Data  &#215;  Gemini</text>
 </svg>

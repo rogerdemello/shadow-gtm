@@ -14,6 +14,8 @@ export type SignalTypeEnum =
 export type ImpactEnum = "high" | "medium" | "low";
 export type PageTypeEnum = "pricing" | "homepage";
 export type MemberRoleEnum = "owner" | "admin" | "member";
+export type JobStatusEnum = "pending" | "running" | "done" | "failed";
+export type ScheduleCadenceEnum = "hourly" | "daily" | "weekly";
 
 type Timestamp = string;
 
@@ -129,6 +131,41 @@ export interface Database {
           company_id?: string | null; created_at?: Timestamp;
         },
         Record<string, never>
+      >;
+      schedules: Table<
+        {
+          id: string; org_id: string; company_id: string | null;
+          cadence: ScheduleCadenceEnum; enabled: boolean;
+          last_run_at: Timestamp | null; next_run_at: Timestamp; created_at: Timestamp;
+        },
+        {
+          id?: string; org_id: string; company_id?: string | null;
+          cadence?: ScheduleCadenceEnum; enabled?: boolean;
+          last_run_at?: Timestamp | null; next_run_at?: Timestamp; created_at?: Timestamp;
+        },
+        {
+          cadence?: ScheduleCadenceEnum; enabled?: boolean;
+          last_run_at?: Timestamp | null; next_run_at?: Timestamp;
+        }
+      >;
+      scan_jobs: Table<
+        {
+          id: string; org_id: string; company_id: string; scan_id: string | null;
+          status: JobStatusEnum; run_at: Timestamp; attempts: number;
+          max_attempts: number; error: string | null; started_at: Timestamp | null;
+          finished_at: Timestamp | null; created_at: Timestamp;
+        },
+        {
+          id?: string; org_id: string; company_id: string; scan_id?: string | null;
+          status?: JobStatusEnum; run_at?: Timestamp; attempts?: number;
+          max_attempts?: number; error?: string | null; started_at?: Timestamp | null;
+          finished_at?: Timestamp | null; created_at?: Timestamp;
+        },
+        {
+          status?: JobStatusEnum; scan_id?: string | null; attempts?: number;
+          error?: string | null; run_at?: Timestamp; started_at?: Timestamp | null;
+          finished_at?: Timestamp | null;
+        }
       >;
     };
     Functions: {

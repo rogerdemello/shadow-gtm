@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCompany, listSignals } from "@/lib/store";
+import { storeOr401 } from "@/lib/store-context";
 import { streamAttackPlan } from "@/lib/ai";
 
 export const runtime = "nodejs";
@@ -21,12 +21,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "directive required" }, { status: 400 });
   }
 
-  const allSignals = await listSignals();
+  const r = await storeOr401();
+  if (r.res) return r.res;
+  const store = r.store;
+
+  const allSignals = await store.listSignals();
   let companyName: string | null = null;
   let signals = allSignals;
 
   if (body.companyId) {
-    const company = await getCompany(body.companyId);
+    const company = await store.getCompany(body.companyId);
     if (company) {
       companyName = company.name;
       signals = allSignals.filter((s) => s.companyId === body.companyId);

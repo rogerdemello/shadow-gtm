@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
-import {
-  getBattlecard,
-  getCompany,
-  id as newId,
-  listSignals,
-  saveBattlecard,
-} from "@/lib/store";
+import { id as newId } from "@/lib/store";
+import { storeOr401 } from "@/lib/store-context";
 import { streamBattlecard } from "@/lib/ai";
 
 export const runtime = "nodejs";
@@ -17,7 +12,9 @@ export async function GET(req: Request) {
   if (!companyId) {
     return NextResponse.json({ error: "companyId required" }, { status: 400 });
   }
-  const card = await getBattlecard(companyId);
+  const r = await storeOr401();
+  if (r.res) return r.res;
+  const card = await r.store.getBattlecard(companyId);
   return NextResponse.json({ battlecard: card ?? null });
 }
 
@@ -36,12 +33,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "companyId required" }, { status: 400 });
   }
 
-  const company = await getCompany(companyId);
+  const r = await storeOr401();
+  if (r.res) return r.res;
+  const store = r.store;
+
+  const company = await store.getCompany(companyId);
   if (!company) {
     return NextResponse.json({ error: "Company not found" }, { status: 404 });
   }
 
-  const signals = (await listSignals()).filter((s) => s.companyId === companyId);
+  const signals = (await store.listSignals()).filter((s) => s.companyId === companyId);
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
@@ -71,7 +72,7 @@ export async function POST(req: Request) {
             markdown: buffer.trim(),
             createdAt: new Date().toISOString(),
           };
-          await saveBattlecard(card);
+          await store.saveBattlecard(card);
           send({ type: "done", battlecard: card });
         }
       } catch (err) {

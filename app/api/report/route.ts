@@ -1,9 +1,4 @@
-import {
-  listCompanies,
-  listSignals,
-  listEvidence,
-} from "@/lib/store";
-import { getBattlecard } from "@/lib/store";
+import { storeOr401 } from "@/lib/store-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,10 +6,14 @@ export const dynamic = "force-dynamic";
 // Single-file Markdown briefing: watchlist + ranked signals + battlecards.
 // What a head of sales would send around as the weekly competitive brief.
 export async function GET() {
+  const r = await storeOr401();
+  if (r.res) return r.res;
+  const store = r.store;
+
   const [companies, signals, evidence] = await Promise.all([
-    listCompanies(),
-    listSignals(),
-    listEvidence(),
+    store.listCompanies(),
+    store.listSignals(),
+    store.listEvidence(),
   ]);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -57,7 +56,7 @@ export async function GET() {
       .filter((s) => s.companyId === company.id)
       .sort((a, b) => b.opportunityScore - a.opportunityScore);
     const ev = evidence.find((e) => e.companyId === company.id);
-    const card = await getBattlecard(company.id);
+    const card = await store.getBattlecard(company.id);
 
     const topScore = sig[0]?.opportunityScore ?? 0;
     lines.push("---");

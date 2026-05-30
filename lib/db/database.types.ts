@@ -117,6 +117,19 @@ export interface Database {
         },
         { markdown?: string; company_name?: string }
       >;
+      usage_events: Table<
+        {
+          id: string; org_id: string; kind: string; tokens_in: number;
+          tokens_out: number; units: number; scan_id: string | null;
+          company_id: string | null; created_at: Timestamp;
+        },
+        {
+          id?: string; org_id: string; kind: string; tokens_in?: number;
+          tokens_out?: number; units?: number; scan_id?: string | null;
+          company_id?: string | null; created_at?: Timestamp;
+        },
+        Record<string, never>
+      >;
     };
     Functions: {
       is_org_member: { Args: { target_org: string }; Returns: boolean };

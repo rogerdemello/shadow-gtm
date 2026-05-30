@@ -135,7 +135,7 @@ export async function scanCompany(
       .join("\n\n") || null;
 
     // 3. Reason: turn it all into ranked, explained signals.
-    const signals = await extractSignals({
+    const { signals, usage } = await extractSignals({
       company,
       pages: pages.map((p) => ({
         pageType: p.pageType,
@@ -148,6 +148,15 @@ export async function scanCompany(
     });
 
     await store.replaceCompanySignals(company.id, signals);
+
+    // 3b. Meter the Gemini call (cost + Phase 7 quotas). Best-effort.
+    await store.recordUsage({
+      kind: "gemini_extraction",
+      tokensIn: usage.promptTokens,
+      tokensOut: usage.outputTokens,
+      scanId,
+      companyId: company.id,
+    });
 
     // 4. Persist what fed this scan so the evidence panel can show it.
     const evidence: ScanEvidence = {

@@ -8,8 +8,10 @@ import type {
   SerpEvidence,
   Signal,
   Snapshot,
+  UsageEvent,
 } from "./types";
 import { DuplicateCompanyError, normalizeDomain } from "./store";
+import { logger } from "./logger";
 
 // ── Supabase-backed store ─────────────────────────────────────────────────────
 // The production replacement for the JSON store (lib/store.ts), org-scoped and
@@ -62,6 +64,9 @@ export interface Store {
 
   saveBattlecard(card: Battlecard): Promise<void>;
   getBattlecard(companyId: string): Promise<Battlecard | undefined>;
+
+  /** Record a metered operation (cost + quota tracking). Best-effort. */
+  recordUsage(event: UsageEvent): Promise<void>;
 
   loadSeedBundle(bundle: {
     companies: Company[];
@@ -288,6 +293,24 @@ export function storeFor(ctx: StoreContext): Store {
       return data ? rowToBattlecard(data) : undefined;
     },
 
+    // ── Usage metering ──────────────────────────────────────────────────────
+    async recordUsage(event) {
+      const insert: Tables["usage_events"]["Insert"] = {
+        org_id: orgId,
+        kind: event.kind,
+        tokens_in: event.tokensIn ?? 0,
+        tokens_out: event.tokensOut ?? 0,
+        units: event.units ?? 1,
+        scan_id: event.scanId ?? null,
+        company_id: event.companyId ?? null,
+      };
+      const { error } = await db.from("usage_events").insert(insert);
+      // Best-effort: metering must never break a scan. Log and move on.
+      if (error) {
+        logger.warn("recordUsage failed", { kind: event.kind, error: error.message });
+      }
+    },
+
     // ── Demo seed ─────────────────────────────────────────────────────────────
     async loadSeedBundle(bundle) {
       // Replace the calling org's state only. Delete companies first; cascades
@@ -313,6 +336,29 @@ export function storeFor(ctx: StoreContext): Store {
         );
         fail("loadSeedBundle.companies", error);
       }
+
+      // Signals/evidence carry a scan_id (FK → scans). Create the referenced
+      // scan rows first so the seed inserts satisfy the constraint.
+      const scanIds = [
+        ...new Set(
+          [
+            ...bundle.signals.map((s) => s.scanId),
+            ...bundle.evidence.map((e) => e.scanId),
+          ].filter((x): x is string => Boolean(x)),
+        ),
+      ];
+      if (scanIds.length) {
+        const { error } = await db.from("scans").insert(
+          scanIds.map((sid) => ({
+            id: sid,
+            org_id: orgId,
+            company_ids: bundle.companies.map((c) => c.id),
+            signal_count: bundle.signals.length,
+          })),
+        );
+        fail("loadSeedBundle.scans", error);
+      }
+
       if (bundle.signals.length) {
         await this.batchInsertSeedSignals(bundle.signals);
       }

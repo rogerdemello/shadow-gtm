@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
-import { addCompany, DuplicateCompanyError, listCompanies } from "@/lib/store";
+import { DuplicateCompanyError } from "@/lib/store";
+import { storeOr401 } from "@/lib/store-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json({ companies: await listCompanies() });
+  const r = await storeOr401();
+  if (r.res) return r.res;
+  return NextResponse.json({ companies: await r.store.listCompanies() });
 }
 
 export async function POST(req: Request) {
@@ -30,8 +33,11 @@ export async function POST(req: Request) {
     );
   }
 
+  const r = await storeOr401();
+  if (r.res) return r.res;
+
   try {
-    const company = await addCompany({
+    const company = await r.store.addCompany({
       name,
       domain,
       pricingUrl: body.pricingUrl,

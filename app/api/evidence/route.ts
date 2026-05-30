@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getEvidence } from "@/lib/store";
+import { storeOr401 } from "@/lib/store-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +11,8 @@ export async function GET(req: Request) {
   if (!companyId) {
     return NextResponse.json({ error: "companyId required" }, { status: 400 });
   }
-  const evidence = await getEvidence(companyId);
+  const r = await storeOr401();
+  if (r.res) return r.res;
+  const evidence = await r.store.getEvidence(companyId);
   return NextResponse.json({ evidence: evidence ?? null });
 }

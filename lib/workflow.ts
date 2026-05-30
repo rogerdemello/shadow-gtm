@@ -9,14 +9,8 @@ import type {
 import { fetchPage, fetchPageRendered, serpSearch } from "./brightdata";
 import { htmlToText } from "./html";
 import { extractSignals } from "./ai";
-import {
-  hash,
-  id,
-  latestSnapshot,
-  replaceCompanySignals,
-  saveEvidence,
-  saveSnapshot,
-} from "./store";
+import { hash, id } from "./store";
+import type { Store } from "./store.supabase";
 
 // ── The core loop ───────────────────────────────────────────────────────────
 //   live web (Bright Data) → diff vs last scan → AI signals + reasoning → store
@@ -52,6 +46,7 @@ interface FetchedPage {
 }
 
 async function fetchAndDiff(
+  store: Store,
   company: Company,
   pageType: PageType,
   url: string,
@@ -59,7 +54,7 @@ async function fetchAndDiff(
   const fetcher = company.renderJs ? fetchPageRendered : fetchPage;
   const html = await fetcher(url);
   const text = htmlToText(html);
-  const prev = await latestSnapshot(company.id, pageType);
+  const prev = await store.latestSnapshot(company.id, pageType);
   const changeSummary = prev ? diffSummary(prev.text, text) : null;
   const snap: Snapshot = {
     id: id(),
@@ -70,13 +65,14 @@ async function fetchAndDiff(
     hash: hash(text),
     fetchedAt: new Date().toISOString(),
   };
-  await saveSnapshot(snap);
+  await store.saveSnapshot(snap);
   return { pageType, url, text, changeSummary };
 }
 
 /** Run the full intelligence pass for one company. Never throws — errors are
  *  returned on the result so the UI can keep streaming the other companies. */
 export async function scanCompany(
+  store: Store,
   company: Company,
   scanId: string,
 ): Promise<ScanCompanyResult> {
@@ -91,8 +87,8 @@ export async function scanCompany(
     // 1. Collect: pricing + homepage pages + intent SERP, mostly in parallel.
     //    The pricing fetch is the required path; homepage and SERP are
     //    best-effort so a partial result still surfaces intelligence.
-    const pricingP = fetchAndDiff(company, "pricing", company.pricingUrl);
-    const homepageP = fetchAndDiff(company, "homepage", homepageUrlFor(company))
+    const pricingP = fetchAndDiff(store, company, "pricing", company.pricingUrl);
+    const homepageP = fetchAndDiff(store, company, "homepage", homepageUrlFor(company))
       .catch(() => null);
     const serpP = serpSearch(
       `${company.name} pricing OR alternatives OR layoffs OR funding OR reviews`,
@@ -127,7 +123,7 @@ export async function scanCompany(
       scanId,
     });
 
-    await replaceCompanySignals(company.id, signals);
+    await store.replaceCompanySignals(company.id, signals);
 
     // 4. Persist what fed this scan so the evidence panel can show it.
     const evidence: ScanEvidence = {
@@ -138,7 +134,7 @@ export async function scanCompany(
       sources: pages.map((p) => ({ url: p.url, pageType: p.pageType })),
       createdAt: new Date().toISOString(),
     };
-    await saveEvidence(evidence);
+    await store.saveEvidence(evidence);
 
     return { ...base, signals, changeSummary: combinedSummary };
   } catch (err) {

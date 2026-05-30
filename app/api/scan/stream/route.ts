@@ -1,5 +1,5 @@
-import { createScan, listCompanies } from "@/lib/store";
 import { scanCompany } from "@/lib/workflow";
+import { storeOr401 } from "@/lib/store-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,7 +9,13 @@ export const maxDuration = 300;
 // each competitor completes, so the dashboard feed fills in live from a single
 // connection. (scanCompany never throws — per-company errors ride on the event.)
 export async function GET() {
-  const companies = await listCompanies();
+  // Resolve auth/org BEFORE opening the stream so an unauthorized caller gets a
+  // clean 401 rather than a half-open event stream.
+  const r = await storeOr401();
+  if (r.res) return r.res;
+  const store = r.store;
+
+  const companies = await store.listCompanies();
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
@@ -32,7 +38,7 @@ export async function GET() {
           return;
         }
 
-        const scan = await createScan(companies.map((c) => c.id));
+        const scan = await store.createScan(companies.map((c) => c.id));
         send({
           type: "start",
           scanId: scan.id,
@@ -42,7 +48,7 @@ export async function GET() {
         for (const company of companies) {
           if (closed) break;
           send({ type: "company-start", companyId: company.id, name: company.name });
-          const result = await scanCompany(company, scan.id);
+          const result = await scanCompany(store, company, scan.id);
           send({ type: "company-done", result });
         }
 

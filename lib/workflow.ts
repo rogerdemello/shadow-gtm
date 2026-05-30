@@ -43,6 +43,8 @@ interface FetchedPage {
   url: string;
   text: string;
   changeSummary: string | null;
+  /** True if this page's content differs from the last snapshot (or is new). */
+  changed: boolean;
 }
 
 async function fetchAndDiff(
@@ -54,19 +56,26 @@ async function fetchAndDiff(
   const fetcher = company.renderJs ? fetchPageRendered : fetchPage;
   const html = await fetcher(url);
   const text = htmlToText(html);
+  const newHash = hash(text);
   const prev = await store.latestSnapshot(company.id, pageType);
+  const changed = !prev || prev.hash !== newHash;
   const changeSummary = prev ? diffSummary(prev.text, text) : null;
-  const snap: Snapshot = {
-    id: id(),
-    companyId: company.id,
-    pageType,
-    url,
-    text,
-    hash: hash(text),
-    fetchedAt: new Date().toISOString(),
-  };
-  await store.saveSnapshot(snap);
-  return { pageType, url, text, changeSummary };
+
+  // Only persist a new snapshot when the content actually changed — avoids
+  // unbounded identical rows on scheduled re-scans.
+  if (changed) {
+    const snap: Snapshot = {
+      id: id(),
+      companyId: company.id,
+      pageType,
+      url,
+      text,
+      hash: newHash,
+      fetchedAt: new Date().toISOString(),
+    };
+    await store.saveSnapshot(snap);
+  }
+  return { pageType, url, text, changeSummary, changed };
 }
 
 /** Run the full intelligence pass for one company. Never throws — errors are
@@ -103,6 +112,21 @@ export async function scanCompany(
 
     const pages: FetchedPage[] = [pricing];
     if (homepage) pages.push(homepage);
+
+    // 1b. Cache-skip: if no monitored page changed and we already have signals
+    //     for this company, reuse them instead of paying for another Gemini
+    //     extraction. This is the big cost saver on scheduled re-scans. (Trade-
+    //     off: a SERP-only change won't surface until a page also moves — an
+    //     acceptable bound on cost; revisit with SERP hashing if needed.)
+    const anyChanged = pages.some((p) => p.changed);
+    if (!anyChanged) {
+      const existing = (await store.listSignals()).filter(
+        (s) => s.companyId === company.id,
+      );
+      if (existing.length > 0) {
+        return { ...base, signals: existing, changeSummary: null };
+      }
+    }
 
     // 2. Build a combined change summary across all monitored pages.
     const combinedSummary = pages

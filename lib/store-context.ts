@@ -40,6 +40,8 @@ const jsonStore: Store = {
   saveBattlecard: json.saveBattlecard,
   getBattlecard: json.getBattlecard,
   loadSeedBundle: json.loadSeedBundle,
+  // The keyless JSON demo doesn't meter usage.
+  recordUsage: async () => {},
 };
 
 /** Resolve the user's active org. For now: their first membership. An explicit

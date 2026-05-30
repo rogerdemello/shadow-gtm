@@ -166,8 +166,36 @@ interface ExtractInput {
   scanId: string;
 }
 
-/** Extract + reason in one structured Gemini call. Returns persisted-shape signals. */
-export async function extractSignals(input: ExtractInput): Promise<Signal[]> {
+/** Token usage reported by Gemini for a single call. */
+export interface TokenUsage {
+  promptTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
+function usageOf(response: {
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+  };
+}): TokenUsage {
+  const u = response.usageMetadata;
+  return {
+    promptTokens: u?.promptTokenCount ?? 0,
+    outputTokens: u?.candidatesTokenCount ?? 0,
+    totalTokens: u?.totalTokenCount ?? 0,
+  };
+}
+
+export interface ExtractionResult {
+  signals: Signal[];
+  usage: TokenUsage;
+}
+
+/** Extract + reason in one structured Gemini call. Returns persisted-shape
+ *  signals plus the call's token usage (for metering). */
+export async function extractSignals(input: ExtractInput): Promise<ExtractionResult> {
   const { company, pages, serp, changeSummary, scanId } = input;
 
   const serpBlock = serp.length
@@ -217,13 +245,14 @@ Return structured signals. Use the URLs above as sourceUrl values.`;
     { label: "gemini:extract", shouldRetry: isTransient },
   );
 
+  const usage = usageOf(response);
   const raw = response.text;
   if (!raw) {
     log.warn("extractSignals: empty model response", {
       companyId: company.id,
       scanId,
     });
-    return [];
+    return { signals: [], usage };
   }
 
   let parsed: z.infer<typeof ExtractionSchema>;
@@ -237,11 +266,11 @@ Return structured signals. Use the URLs above as sourceUrl values.`;
       scanId,
       rawPreview: raw.slice(0, 500),
     });
-    return [];
+    return { signals: [], usage };
   }
 
   const now = new Date().toISOString();
-  return parsed.signals.map((s) => ({
+  const signals = parsed.signals.map((s) => ({
     id: id(),
     companyId: company.id,
     companyName: company.name,
@@ -257,6 +286,8 @@ Return structured signals. Use the URLs above as sourceUrl values.`;
     quote: (s.quote || "").trim().slice(0, 240) || undefined,
     createdAt: now,
   }));
+
+  return { signals, usage };
 }
 
 const BATTLECARD_SYSTEM = `You are a competitive enablement strategist. Given a competitor and a set of intelligence signals, produce a crisp sales battlecard in Markdown. Sections:

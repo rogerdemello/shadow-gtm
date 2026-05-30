@@ -1,8 +1,7 @@
 // Apply supabase/migrations/*.sql in filename order over a direct Postgres
 // connection. Ops/dev only — the app never connects to Postgres directly (it
-// goes through the Supabase client + RLS). Idempotent-ish: re-running fails on
-// `create type`/`create table` that already exist, so it's meant for a fresh DB
-// (or run individual files via the SQL Editor after that).
+// goes through the Supabase client + RLS). Idempotent: each file is recorded in
+// a _migrations table after it runs, so re-running only applies new files.
 //
 //   SUPABASE_DB_URL=postgresql://... node scripts/apply-migrations.mjs
 //
@@ -54,14 +53,35 @@ const client = new pg.Client({
 
 try {
   await client.connect();
-  console.log(`Connected. Applying ${files.length} migration(s):\n`);
+  await client.query(
+    `create table if not exists _migrations (name text primary key, applied_at timestamptz default now());`,
+  );
+  const applied = new Set(
+    (await client.query(`select name from _migrations;`)).rows.map((r) => r.name),
+  );
+
+  console.log(`Connected. ${files.length} migration file(s) found:\n`);
+  let ran = 0;
   for (const file of files) {
+    if (applied.has(file)) {
+      console.log(`  – ${file} (already applied)`);
+      continue;
+    }
     const sql = readFileSync(path.join(migrationsDir, file), "utf8");
     process.stdout.write(`  • ${file} … `);
-    await client.query(sql);
-    console.log("ok");
+    await client.query("begin");
+    try {
+      await client.query(sql);
+      await client.query(`insert into _migrations (name) values ($1);`, [file]);
+      await client.query("commit");
+      console.log("ok");
+      ran++;
+    } catch (e) {
+      await client.query("rollback");
+      throw e;
+    }
   }
-  console.log("\nAll migrations applied successfully.");
+  console.log(`\nDone. Applied ${ran} new migration(s).`);
 } catch (err) {
   console.error(`\nMigration failed: ${err.message}`);
   process.exitCode = 1;

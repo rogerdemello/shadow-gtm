@@ -106,3 +106,13 @@ export interface ScanCompanyResult {
   changeSummary: string | null;
   error?: string;
 }
+
+/** A metered operation (Gemini call, Bright Data fetch, …) for cost + quotas. */
+export interface UsageEvent {
+  kind: string;
+  tokensIn?: number;
+  tokensOut?: number;
+  units?: number;
+  scanId?: string | null;
+  companyId?: string | null;
+}

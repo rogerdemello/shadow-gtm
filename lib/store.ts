@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
+import { getEnv } from "./env";
 import type {
   Battlecard,
   Company,
@@ -29,7 +30,7 @@ interface DB {
 // On Vercel we use a tmp dir (persists within a warm instance — fine for a demo
 // session). Locally we use ./data. For durable prod persistence, swap this
 // module for Postgres/Turso — everything goes through here.
-const DATA_DIR = process.env.VERCEL
+const DATA_DIR = getEnv().VERCEL
   ? path.join(os.tmpdir(), "shadow-gtm")
   : path.join(process.cwd(), "data");
 const DB_PATH = path.join(DATA_DIR, "db.json");

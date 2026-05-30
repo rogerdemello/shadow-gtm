@@ -4,6 +4,10 @@ import type { Company, PageType, Signal, SignalType } from "./types";
 import type { SerpResult } from "./brightdata";
 import { id } from "./store";
 import { clip } from "./html";
+import { getEnv, geminiConfigured as envGeminiConfigured } from "./env";
+import { logger } from "./logger";
+
+const log = logger.child({ module: "ai" });
 
 // ── Gemini integration ──────────────────────────────────────────────────────
 // One structured call per company turns scraped web text into fully-reasoned
@@ -11,24 +15,24 @@ import { clip } from "./html";
 // keep the live scan responsive). A second free-text call generates battlecards
 // on demand. System prompts are stable and supplied via systemInstruction.
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const MODEL = getEnv().GEMINI_MODEL;
 
 // Optional thinking-budget override (tokens). Gemini 2.5 decides dynamically by
 // default; set GEMINI_THINKING_BUDGET=0 to disable thinking for the snappiest
 // live demo, or a positive number to cap it. Left unset → model default.
+// (Parsed + validated to a number|undefined in lib/env.ts.)
 function thinkingConfig(): { thinkingBudget: number } | undefined {
-  const raw = process.env.GEMINI_THINKING_BUDGET;
-  if (raw === undefined || raw === "") return undefined;
-  const n = Number(raw);
-  return Number.isNaN(n) ? undefined : { thinkingBudget: n };
+  const budget = getEnv().GEMINI_THINKING_BUDGET;
+  return budget === undefined ? undefined : { thinkingBudget: budget };
 }
 
 let _client: GoogleGenAI | null = null;
 function client(): GoogleGenAI {
-  if (!process.env.GEMINI_API_KEY) {
+  const apiKey = getEnv().GEMINI_API_KEY;
+  if (!apiKey) {
     throw new Error("GEMINI_API_KEY is not set");
   }
-  return (_client ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }));
+  return (_client ??= new GoogleGenAI({ apiKey }));
 }
 
 // ── Structured signal schema ────────────────────────────────────────────────
@@ -209,12 +213,25 @@ Return structured signals. Use the URLs above as sourceUrl values.`;
   });
 
   const raw = response.text;
-  if (!raw) return [];
+  if (!raw) {
+    log.warn("extractSignals: empty model response", {
+      companyId: company.id,
+      scanId,
+    });
+    return [];
+  }
 
   let parsed: z.infer<typeof ExtractionSchema>;
   try {
     parsed = ExtractionSchema.parse(JSON.parse(raw));
-  } catch {
+  } catch (err) {
+    // Don't fail the scan, but never lose the failure: a parse/validation miss
+    // here means zero signals for the company, which must be diagnosable.
+    log.error("extractSignals: failed to parse model output", err, {
+      companyId: company.id,
+      scanId,
+      rawPreview: raw.slice(0, 500),
+    });
     return [];
   }
 
@@ -360,6 +377,7 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
+/** Re-exported from lib/env so existing route imports keep working. */
 export function geminiConfigured(): boolean {
-  return Boolean(process.env.GEMINI_API_KEY);
+  return envGeminiConfigured();
 }

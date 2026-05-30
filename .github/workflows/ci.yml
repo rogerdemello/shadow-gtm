@@ -28,9 +28,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # `next build` runs the TypeScript compiler, so a green build is also a
-      # green type-check. No API keys are needed: all AI/Bright Data calls happen
-      # at request time, never during the build.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      # `next build` also runs the TypeScript compiler. No API keys are needed:
+      # all AI/Bright Data calls happen at request time, never during the build,
+      # and lib/env applies safe defaults (mock mode) when keys are absent.
       - name: Build
         run: npm run build
         env:

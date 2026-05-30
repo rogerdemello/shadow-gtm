@@ -22,8 +22,9 @@ import {
 //   live web (Bright Data) → diff vs last scan → AI signals + reasoning → store
 // This is the one workflow the whole product (and demo) revolves around.
 
-/** Line-level diff summary good enough to feed the model "what changed". */
-function diffSummary(oldText: string, newText: string): string | null {
+/** Line-level diff summary good enough to feed the model "what changed".
+ *  Exported for unit testing — it's the core "what changed" primitive. */
+export function diffSummary(oldText: string, newText: string): string | null {
   if (!oldText) return null;
   const oldLines = new Set(oldText.split("\n").map((l) => l.trim()));
   const newLines = new Set(newText.split("\n").map((l) => l.trim()));

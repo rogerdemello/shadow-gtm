@@ -1,4 +1,13 @@
 import { mockPage, mockSerp } from "./mock";
+import {
+  getEnv,
+  isMockMode,
+  brightDataConfigured as envBrightDataConfigured,
+  scrapingBrowserConfigured as envScrapingBrowserConfigured,
+} from "./env";
+import { logger } from "./logger";
+
+const log = logger.child({ module: "brightdata" });
 
 // ── Bright Data client ──────────────────────────────────────────────────────
 // Uses the unified Bright Data API endpoint (https://api.brightdata.com/request),
@@ -22,13 +31,13 @@ export interface SerpResult {
 export class BrightDataError extends Error {}
 
 function token(): string {
-  const t = process.env.BRIGHTDATA_API_TOKEN;
+  const t = getEnv().BRIGHTDATA_API_TOKEN;
   if (!t) throw new BrightDataError("BRIGHTDATA_API_TOKEN is not set");
   return t;
 }
 
 function isMock(): boolean {
-  return process.env.SHADOW_GTM_MOCK === "1" || !process.env.BRIGHTDATA_API_TOKEN;
+  return isMockMode();
 }
 
 async function brdRequest(zone: string, url: string): Promise<string> {
@@ -52,10 +61,15 @@ async function brdRequest(zone: string, url: string): Promise<string> {
     }
     return body;
   } catch (err) {
-    if (err instanceof BrightDataError) throw err;
+    if (err instanceof BrightDataError) {
+      log.warn("Bright Data request returned an error", { zone, url, error: err.message });
+      throw err;
+    }
     if ((err as Error).name === "AbortError") {
+      log.warn("Bright Data request timed out", { zone, url, timeoutMs: TIMEOUT_MS });
       throw new BrightDataError(`Bright Data request timed out after ${TIMEOUT_MS}ms`);
     }
+    log.error("Bright Data request failed", err, { zone, url });
     throw new BrightDataError(`Bright Data request failed: ${(err as Error).message}`);
   } finally {
     clearTimeout(timer);
@@ -65,7 +79,7 @@ async function brdRequest(zone: string, url: string): Promise<string> {
 /** Fetch a public page's HTML through the Web Unlocker zone. */
 export async function fetchPage(url: string): Promise<string> {
   if (isMock()) return mockPage(url);
-  const zone = process.env.BRIGHTDATA_UNLOCKER_ZONE || "web_unlocker1";
+  const zone = getEnv().BRIGHTDATA_UNLOCKER_ZONE;
   return brdRequest(zone, url);
 }
 
@@ -76,7 +90,7 @@ export async function fetchPage(url: string): Promise<string> {
 export async function fetchPageRendered(url: string): Promise<string> {
   if (isMock()) return mockPage(url);
 
-  const ws = process.env.BRIGHTDATA_BROWSER_WS;
+  const ws = getEnv().BRIGHTDATA_BROWSER_WS;
   if (!ws) {
     throw new BrightDataError(
       "BRIGHTDATA_BROWSER_WS is not set (Scraping Browser CDP endpoint)",
@@ -102,7 +116,7 @@ export async function fetchPageRendered(url: string): Promise<string> {
 /** Structured Google results for a query through the SERP API zone. */
 export async function serpSearch(query: string, num = 10): Promise<SerpResult[]> {
   if (isMock()) return mockSerp(query);
-  const zone = process.env.BRIGHTDATA_SERP_ZONE || "serp_api1";
+  const zone = getEnv().BRIGHTDATA_SERP_ZONE;
   const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=${num}&brd_json=1`;
   const raw = await brdRequest(zone, url);
 
@@ -117,18 +131,25 @@ export async function serpSearch(query: string, num = 10): Promise<SerpResult[]>
         snippet: r.description ?? "",
       }))
       .filter((r) => r.title && r.link);
-  } catch {
+  } catch (err) {
     // Some SERP zones return HTML if brd_json isn't enabled; degrade gracefully.
+    log.warn("SERP zone did not return JSON", {
+      zone,
+      query,
+      error: (err as Error).message,
+    });
     throw new BrightDataError(
       "SERP zone did not return JSON. Enable parsing (brd_json) on the zone or check the zone name.",
     );
   }
 }
 
+/** Re-exported from lib/env so existing route imports keep working. */
 export function brightDataConfigured(): boolean {
-  return Boolean(process.env.BRIGHTDATA_API_TOKEN) && process.env.SHADOW_GTM_MOCK !== "1";
+  return envBrightDataConfigured();
 }
 
+/** Re-exported from lib/env so existing route imports keep working. */
 export function scrapingBrowserConfigured(): boolean {
-  return Boolean(process.env.BRIGHTDATA_BROWSER_WS) && process.env.SHADOW_GTM_MOCK !== "1";
+  return envScrapingBrowserConfigured();
 }

@@ -1,4 +1,5 @@
 import { storeOr401 } from "@/lib/store-context";
+import { computeMomentum } from "@/lib/trends";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,6 +58,7 @@ export async function GET() {
       .sort((a, b) => b.opportunityScore - a.opportunityScore);
     const ev = evidence.find((e) => e.companyId === company.id);
     const card = await store.getBattlecard(company.id);
+    const momentum = computeMomentum(company.id, await store.listSignalHistory(company.id));
 
     const topScore = sig[0]?.opportunityScore ?? 0;
     lines.push("---");
@@ -66,6 +68,16 @@ export async function GET() {
       `*${sig.length} signal${sig.length === 1 ? "" : "s"}${topScore ? ` · top opportunity score ${topScore}` : ""}*`,
     );
     lines.push("");
+
+    // Momentum (from the append-only signal history — the data moat).
+    if (momentum.distinctScans > 0) {
+      const arrow =
+        momentum.scoreTrend === "up" ? "▲" : momentum.scoreTrend === "down" ? "▼" : "▬";
+      lines.push(
+        `**Momentum:** ${arrow} opportunity trend · ${momentum.distinctScans} scan${momentum.distinctScans === 1 ? "" : "s"} tracked · ${momentum.pricingChanges} pricing move${momentum.pricingChanges === 1 ? "" : "s"} observed`,
+      );
+      lines.push("");
+    }
 
     if (ev?.sources?.length) {
       lines.push(`**Pages monitored** (Bright Data):`);

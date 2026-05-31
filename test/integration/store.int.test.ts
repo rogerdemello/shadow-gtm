@@ -131,6 +131,22 @@ describe("usage metering", () => {
   });
 });
 
+describe("history queries (data moat)", () => {
+  it("listSignalHistory returns the full append-only history", async () => {
+    // The signals block above created 1 old + 2 current = 3 rows.
+    const history = await store.listSignalHistory(companyId);
+    expect(history.length).toBe(3);
+    // Oldest-first ordering.
+    expect(history[0].createdAt <= history[history.length - 1].createdAt).toBe(true);
+  });
+
+  it("listSnapshots returns retained snapshots for the company", async () => {
+    const snaps = await store.listSnapshots(companyId);
+    expect(snaps.length).toBeGreaterThanOrEqual(1);
+    expect(snaps[0].url).toContain("acme.com/pricing");
+  });
+});
+
 describe("alerting", () => {
   it("defaults the alert threshold to 70 when no rule exists", async () => {
     expect(await store.getAlertThreshold()).toBe(70);

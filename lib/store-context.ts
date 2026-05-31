@@ -33,6 +33,10 @@ const jsonStore: Store = {
   saveSnapshot: json.saveSnapshot,
   listSignals: json.listSignals,
   replaceCompanySignals: json.replaceCompanySignals,
+  // The JSON demo doesn't retain history; approximate with current signals.
+  listSignalHistory: async (companyId: string) =>
+    (await json.listSignals()).filter((s) => s.companyId === companyId),
+  listSnapshots: async () => [],
   createScan: json.createScan,
   saveEvidence: json.saveEvidence,
   listEvidence: json.listEvidence,

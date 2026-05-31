@@ -57,6 +57,10 @@ export interface Store {
   listSignals(): Promise<Signal[]>;
   /** Replace a company's CURRENT signals with this scan's output, keeping history. */
   replaceCompanySignals(companyId: string, signals: Signal[]): Promise<void>;
+  /** Full append-only signal history for a company (current + past), oldest first. */
+  listSignalHistory(companyId: string): Promise<Signal[]>;
+  /** All retained snapshots for a company, newest first (audit trail). */
+  listSnapshots(companyId: string): Promise<Snapshot[]>;
 
   createScan(companyIds: string[]): Promise<Scan>;
 
@@ -192,6 +196,28 @@ export function storeFor(ctx: StoreContext): Store {
         .order("created_at", { ascending: false });
       fail("listSignals", error);
       return (data ?? []).map(rowToSignal);
+    },
+
+    async listSignalHistory(companyId) {
+      const { data, error } = await db
+        .from("signals")
+        .select("*")
+        .eq("org_id", orgId)
+        .eq("company_id", companyId)
+        .order("created_at", { ascending: true });
+      fail("listSignalHistory", error);
+      return (data ?? []).map(rowToSignal);
+    },
+
+    async listSnapshots(companyId) {
+      const { data, error } = await db
+        .from("snapshots")
+        .select("*")
+        .eq("org_id", orgId)
+        .eq("company_id", companyId)
+        .order("fetched_at", { ascending: false });
+      fail("listSnapshots", error);
+      return (data ?? []).map(rowToSnapshot);
     },
 
     async replaceCompanySignals(companyId, signals) {

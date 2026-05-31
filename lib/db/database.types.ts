@@ -167,6 +167,32 @@ export interface Database {
           finished_at?: Timestamp | null;
         }
       >;
+      alert_rules: Table<
+        {
+          org_id: string; min_opportunity: number; channels: string[];
+          digest_enabled: boolean; created_at: Timestamp;
+        },
+        {
+          org_id: string; min_opportunity?: number; channels?: string[];
+          digest_enabled?: boolean; created_at?: Timestamp;
+        },
+        { min_opportunity?: number; channels?: string[]; digest_enabled?: boolean }
+      >;
+      notifications: Table<
+        {
+          id: string; org_id: string; signal_id: string | null;
+          company_id: string | null; company_name: string; kind: string;
+          title: string; body: string | null; opportunity_score: number | null;
+          read_at: Timestamp | null; created_at: Timestamp;
+        },
+        {
+          id?: string; org_id: string; signal_id?: string | null;
+          company_id?: string | null; company_name: string; kind?: string;
+          title: string; body?: string | null; opportunity_score?: number | null;
+          read_at?: Timestamp | null; created_at?: Timestamp;
+        },
+        { read_at?: Timestamp | null }
+      >;
     };
     Functions: {
       is_org_member: { Args: { target_org: string }; Returns: boolean };

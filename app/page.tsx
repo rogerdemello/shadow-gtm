@@ -27,7 +27,11 @@ export default async function Page() {
 
   return (
     <>
-      <AccountBar email={user.email ?? ""} orgName={org?.name ?? "Workspace"} />
+      <AccountBar
+        email={user.email ?? ""}
+        orgName={org?.name ?? "Workspace"}
+        orgId={orgId}
+      />
       <Dashboard />
     </>
   );

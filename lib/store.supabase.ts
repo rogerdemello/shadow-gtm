@@ -3,6 +3,8 @@ import type { Database } from "./db/database.types";
 import type {
   Battlecard,
   Company,
+  NewNotification,
+  Notification,
   Scan,
   ScanEvidence,
   SerpEvidence,
@@ -67,6 +69,12 @@ export interface Store {
 
   /** Record a metered operation (cost + quota tracking). Best-effort. */
   recordUsage(event: UsageEvent): Promise<void>;
+
+  /** The org's opportunity-score alert threshold (default 70 when unset). */
+  getAlertThreshold(): Promise<number>;
+  createNotifications(items: NewNotification[]): Promise<void>;
+  listNotifications(limit?: number): Promise<Notification[]>;
+  markNotificationsRead(ids: string[]): Promise<void>;
 
   loadSeedBundle(bundle: {
     companies: Company[];
@@ -311,6 +319,53 @@ export function storeFor(ctx: StoreContext): Store {
       }
     },
 
+    // ── Alerting ──────────────────────────────────────────────────────────────
+    async getAlertThreshold() {
+      const { data } = await db
+        .from("alert_rules")
+        .select("min_opportunity")
+        .eq("org_id", orgId)
+        .maybeSingle();
+      return data?.min_opportunity ?? 70;
+    },
+
+    async createNotifications(items) {
+      if (items.length === 0) return;
+      const rows: Tables["notifications"]["Insert"][] = items.map((n) => ({
+        org_id: orgId,
+        signal_id: n.signalId ?? null,
+        company_id: n.companyId ?? null,
+        company_name: n.companyName,
+        kind: n.kind ?? "signal",
+        title: n.title,
+        body: n.body ?? null,
+        opportunity_score: n.opportunityScore ?? null,
+      }));
+      const { error } = await db.from("notifications").insert(rows);
+      if (error) logger.warn("createNotifications failed", { error: error.message });
+    },
+
+    async listNotifications(limit = 50) {
+      const { data, error } = await db
+        .from("notifications")
+        .select("*")
+        .eq("org_id", orgId)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      fail("listNotifications", error);
+      return (data ?? []).map(rowToNotification);
+    },
+
+    async markNotificationsRead(ids) {
+      if (ids.length === 0) return;
+      const { error } = await db
+        .from("notifications")
+        .update({ read_at: new Date().toISOString() })
+        .eq("org_id", orgId)
+        .in("id", ids);
+      fail("markNotificationsRead", error);
+    },
+
     // ── Demo seed ─────────────────────────────────────────────────────────────
     async loadSeedBundle(bundle) {
       // Replace the calling org's state only. Delete companies first; cascades
@@ -486,6 +541,21 @@ export function rowToEvidence(r: Tables["scan_evidence"]["Row"]): ScanEvidence {
     changeSummary: r.change_summary,
     serp: (r.serp as SerpEvidence[] | null) ?? [],
     sources: (r.sources as ScanEvidence["sources"] | null) ?? [],
+    createdAt: r.created_at,
+  };
+}
+
+export function rowToNotification(r: Tables["notifications"]["Row"]): Notification {
+  return {
+    id: r.id,
+    signalId: r.signal_id,
+    companyId: r.company_id,
+    companyName: r.company_name,
+    kind: r.kind,
+    title: r.title,
+    body: r.body,
+    opportunityScore: r.opportunity_score,
+    readAt: r.read_at,
     createdAt: r.created_at,
   };
 }

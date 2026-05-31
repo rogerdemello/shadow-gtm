@@ -116,3 +116,28 @@ export interface UsageEvent {
   scanId?: string | null;
   companyId?: string | null;
 }
+
+/** An in-app alert surfaced in the dashboard (and source for email digests). */
+export interface Notification {
+  id: string;
+  signalId: string | null;
+  companyId: string | null;
+  companyName: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  opportunityScore: number | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
+/** Fields needed to create a notification (ids/timestamps filled by the store). */
+export interface NewNotification {
+  signalId?: string | null;
+  companyId?: string | null;
+  companyName: string;
+  kind?: string;
+  title: string;
+  body?: string | null;
+  opportunityScore?: number | null;
+}

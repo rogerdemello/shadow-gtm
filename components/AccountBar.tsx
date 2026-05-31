@@ -2,16 +2,19 @@
 
 import { useRouter } from "next/navigation";
 import { getBrowserClient } from "@/lib/db/browser";
+import NotificationsBell from "./NotificationsBell";
 
-// Thin top bar above the dashboard: shows the active workspace + signed-in user
-// and a sign-out control. Rendered by the server shell (app/page.tsx) only when
-// auth is active.
+// Thin top bar above the dashboard: shows the active workspace + signed-in user,
+// a live alerts bell, and a sign-out control. Rendered by the server shell
+// (app/page.tsx) only when auth is active.
 export default function AccountBar({
   email,
   orgName,
+  orgId,
 }: {
   email: string;
   orgName: string;
+  orgId: string;
 }) {
   const router = useRouter();
 
@@ -26,6 +29,7 @@ export default function AccountBar({
       <span className="font-mono text-neutral-400">{orgName}</span>
       <span className="text-neutral-700">·</span>
       <span>{email}</span>
+      <NotificationsBell orgId={orgId} />
       <button
         onClick={signOut}
         className="rounded border border-neutral-800 px-2 py-1 text-neutral-300 transition hover:border-neutral-600 hover:text-neutral-100"

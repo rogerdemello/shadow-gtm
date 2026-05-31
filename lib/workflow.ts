@@ -158,6 +158,24 @@ export async function scanCompany(
       companyId: company.id,
     });
 
+    // 3c. Alert on signals crossing the org's opportunity threshold. Runs only
+    //     when extraction ran (the cache-skip path returns earlier), so we don't
+    //     re-notify when nothing changed.
+    const threshold = await store.getAlertThreshold();
+    const alerts = signals.filter((s) => s.opportunityScore >= threshold);
+    if (alerts.length) {
+      await store.createNotifications(
+        alerts.map((s) => ({
+          signalId: s.id,
+          companyId: company.id,
+          companyName: company.name,
+          title: `${company.name}: ${s.description}`,
+          body: s.reasoning,
+          opportunityScore: s.opportunityScore,
+        })),
+      );
+    }
+
     // 4. Persist what fed this scan so the evidence panel can show it.
     const evidence: ScanEvidence = {
       scanId,

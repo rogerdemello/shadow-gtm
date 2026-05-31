@@ -131,6 +131,26 @@ describe("usage metering", () => {
   });
 });
 
+describe("alerting", () => {
+  it("defaults the alert threshold to 70 when no rule exists", async () => {
+    expect(await store.getAlertThreshold()).toBe(70);
+  });
+
+  it("creates, lists, and marks notifications read", async () => {
+    await store.createNotifications([
+      { companyId, companyName: "Acme", title: "Acme: price hike", opportunityScore: 88 },
+      { companyId, companyName: "Acme", title: "Acme: layoffs", opportunityScore: 75 },
+    ]);
+    const list = await store.listNotifications();
+    expect(list.length).toBeGreaterThanOrEqual(2);
+    expect(list.every((n) => n.readAt === null)).toBe(true);
+
+    await store.markNotificationsRead(list.map((n) => n.id));
+    const after = await store.listNotifications();
+    expect(after.every((n) => n.readAt !== null)).toBe(true);
+  });
+});
+
 describe("battlecards", () => {
   it("upserts (one current card per company)", async () => {
     await store.saveBattlecard({

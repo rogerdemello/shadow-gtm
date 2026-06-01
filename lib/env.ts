@@ -52,6 +52,8 @@ const EnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1).optional(),
   /** Server-only secret — full DB access for the background worker; NEVER expose. */
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+  /** "1" surfaces the "Sign in with SSO" path (set once an SSO provider exists). */
+  NEXT_PUBLIC_SSO_ENABLED: z.enum(["0", "1"]).optional(),
 
   /** Shared secret the cron trigger uses to authorize the worker route. */
   WORKER_SECRET: z.string().min(1).optional(),

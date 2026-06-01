@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getBrowserClient } from "@/lib/db/browser";
+import { domainFromEmail, ssoEnabled } from "@/lib/auth/sso";
 
 type Mode = "signin" | "signup";
 
@@ -51,6 +52,24 @@ export default function LoginForm() {
     } catch (err) {
       setError((err as Error).message);
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function signInWithSSO() {
+    setError(null);
+    const domain = domainFromEmail(email);
+    if (!domain) {
+      setError("Enter your work email to sign in with SSO.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data, error } = await getBrowserClient().auth.signInWithSSO({ domain });
+      if (error) throw error;
+      if (data?.url) window.location.href = data.url;
+    } catch (err) {
+      setError((err as Error).message);
       setBusy(false);
     }
   }
@@ -108,6 +127,22 @@ export default function LoginForm() {
           {busy ? "…" : mode === "signin" ? "Sign in" : "Create account"}
         </button>
       </form>
+
+      {ssoEnabled() && (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={signInWithSSO}
+            disabled={busy}
+            className="w-full rounded-md border border-neutral-800 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-600 hover:text-neutral-100 disabled:opacity-50"
+          >
+            Sign in with SSO
+          </button>
+          <p className="mt-1 text-center text-[11px] text-neutral-600">
+            Uses your work email&apos;s identity provider (Enterprise).
+          </p>
+        </div>
+      )}
 
       <button
         onClick={() => {

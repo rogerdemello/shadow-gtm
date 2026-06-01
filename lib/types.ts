@@ -193,6 +193,16 @@ export interface UsageSummary {
   byKind: Record<string, number>;
 }
 
+/** A scan job that exhausted its retries — surfaced for visibility + manual retry. */
+export interface FailedJob {
+  id: string;
+  companyId: string;
+  attempts: number;
+  error: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+}
+
 // ── Billing & plans (Phase 10) ──────────────────────────────────────────────
 
 export type PlanId = "free" | "startup" | "growth" | "enterprise";

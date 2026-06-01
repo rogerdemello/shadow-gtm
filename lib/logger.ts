@@ -70,10 +70,28 @@ function make(bound: Fields): Logger {
 export const logger: Logger = make({});
 
 // ── Sentry hook (optional) ───────────────────────────────────────────────────
-// Kept as a thin seam so wiring the real SDK later is a one-function change. With
-// no SENTRY_DSN this never loads anything.
-export function captureError(_err: unknown, _context?: Fields): void {
-  if (!process.env.SENTRY_DSN) return;
-  // Intentionally a stub until @sentry/nextjs is added in a later step; the DSN
-  // gate means production won't silently assume Sentry is capturing.
+// Forwards errors to Sentry when SENTRY_DSN is set. @sentry/node is imported
+// lazily (and only then) so it never enters the client bundle and dev/local
+// runs with no DSN load nothing. Fire-and-forget — logging never throws.
+let _sentry: typeof import("@sentry/node") | null = null;
+let _sentryInit = false;
+
+export function captureError(err: unknown, context?: Fields): void {
+  const dsn = process.env.SENTRY_DSN;
+  if (!dsn) return;
+  void (async () => {
+    try {
+      if (!_sentry) {
+        _sentry = await import("@sentry/node");
+        if (!_sentryInit) {
+          _sentry.init({ dsn, environment: process.env.NODE_ENV, tracesSampleRate: 0 });
+          _sentryInit = true;
+        }
+      }
+      const e = err instanceof Error ? err : new Error(String(err));
+      _sentry.captureException(e, { extra: context });
+    } catch {
+      // Never let error reporting itself throw.
+    }
+  })();
 }

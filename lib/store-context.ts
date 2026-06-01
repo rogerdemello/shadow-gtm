@@ -98,6 +98,9 @@ const jsonStore: Store = {
     throw new Error("API keys require a configured workspace.");
   },
   revokeApiKey: async () => {},
+  // No background queue in the demo.
+  listFailedJobs: async () => [],
+  retryJob: async () => {},
 };
 
 /** Resolve the user's active org. For now: their first membership. An explicit

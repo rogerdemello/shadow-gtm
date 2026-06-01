@@ -10,6 +10,7 @@ import TrendsPanel, { type TrendEntry } from "./TrendsPanel";
 import BattlecardModal from "./BattlecardModal";
 import WarRoomModal from "./WarRoomModal";
 import EvidenceModal from "./EvidenceModal";
+import ErrorBoundary from "./ErrorBoundary";
 import { LiveDot } from "./bits";
 import { readSSE } from "@/lib/sse";
 
@@ -527,21 +528,29 @@ export default function Dashboard() {
         </div>
 
         <div className="space-y-4 lg:col-span-2">
-          <CompetitorMatrix
-            companies={companies}
-            signals={signals}
-            scanningId={scanningId}
-            sparklines={sparklines}
-            onBattlecard={openBattlecard}
-            onRemove={removeCompany}
-          />
-          {!empty && <TrendsPanel trends={trends} />}
-          <div className="h-[560px]">
-            <IntelligenceFeed
+          <ErrorBoundary label="the competitor matrix">
+            <CompetitorMatrix
+              companies={companies}
               signals={signals}
-              scanningName={scanningName}
-              onEvidence={setEvidenceSignal}
+              scanningId={scanningId}
+              sparklines={sparklines}
+              onBattlecard={openBattlecard}
+              onRemove={removeCompany}
             />
+          </ErrorBoundary>
+          {!empty && (
+            <ErrorBoundary label="the trends panel">
+              <TrendsPanel trends={trends} />
+            </ErrorBoundary>
+          )}
+          <div className="h-[560px]">
+            <ErrorBoundary label="the intelligence feed">
+              <IntelligenceFeed
+                signals={signals}
+                scanningName={scanningName}
+                onEvidence={setEvidenceSignal}
+              />
+            </ErrorBoundary>
           </div>
         </div>
       </div>

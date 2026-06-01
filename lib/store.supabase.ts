@@ -11,6 +11,7 @@ import type {
   Notification,
   OrgSettings,
   ApiKey,
+  FailedJob,
   Integration,
   Scan,
   ScanEvidence,
@@ -158,6 +159,12 @@ export interface Store {
     createdBy: string | null;
   }): Promise<ApiKey>;
   revokeApiKey(id: string): Promise<void>;
+
+  // ── Reliability (Phase 13) ─────────────────────────────────────────────────
+  /** Scan jobs that exhausted retries (dead-letter), newest first. */
+  listFailedJobs(): Promise<FailedJob[]>;
+  /** Re-queue a failed job for another attempt. */
+  retryJob(id: string): Promise<void>;
 }
 
 /** Bind the store operations to one org's data through the given client. */
@@ -763,6 +770,43 @@ export function storeFor(ctx: StoreContext): Store {
         .eq("org_id", orgId)
         .eq("id", id);
       fail("revokeApiKey", error);
+    },
+
+    // ── Reliability: dead-letter jobs ──────────────────────────────────────
+    async listFailedJobs() {
+      const { data, error } = await db
+        .from("scan_jobs")
+        .select("id, company_id, attempts, error, finished_at, created_at")
+        .eq("org_id", orgId)
+        .eq("status", "failed")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      fail("listFailedJobs", error);
+      return (data ?? []).map((r) => ({
+        id: r.id,
+        companyId: r.company_id,
+        attempts: r.attempts,
+        error: r.error,
+        finishedAt: r.finished_at,
+        createdAt: r.created_at,
+      }));
+    },
+
+    async retryJob(id) {
+      const { error } = await db
+        .from("scan_jobs")
+        .update({
+          status: "pending",
+          attempts: 0,
+          error: null,
+          run_at: new Date().toISOString(),
+          started_at: null,
+          finished_at: null,
+        })
+        .eq("org_id", orgId)
+        .eq("id", id)
+        .eq("status", "failed");
+      fail("retryJob", error);
     },
 
     // ── Demo seed ─────────────────────────────────────────────────────────────

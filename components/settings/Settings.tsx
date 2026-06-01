@@ -62,7 +62,7 @@ export default function Settings({
       {tab === "Billing" && <BillingTab role={role} />}
       {tab === "Integrations" && <IntegrationsTab role={role} />}
       {tab === "Alerts" && <AlertsTab />}
-      {tab === "Usage" && <UsageTab />}
+      {tab === "Usage" && <UsageTab role={role} />}
     </div>
   );
 }
@@ -944,7 +944,7 @@ function AlertsTab() {
 
 // ── Usage ──────────────────────────────────────────────────────────────────
 
-function UsageTab() {
+function UsageTab({ role }: { role: MemberRole }) {
   const [days, setDays] = useState(30);
   const [summary, setSummary] = useState<UsageSummary | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -958,6 +958,7 @@ function UsageTab() {
   }, [days]);
 
   return (
+    <div className="space-y-4">
     <Panel>
       {err && <Notice kind="error">{err}</Notice>}
       <div className="mb-4 flex items-center gap-2">
@@ -1003,6 +1004,72 @@ function UsageTab() {
             </div>
           )}
         </>
+      )}
+    </Panel>
+    <JobsPanel role={role} />
+    </div>
+  );
+}
+
+function JobsPanel({ role }: { role: MemberRole }) {
+  interface FailedJobRow {
+    id: string;
+    companyId: string;
+    attempts: number;
+    error: string | null;
+    finishedAt: string | null;
+    createdAt: string;
+  }
+  const [jobs, setJobs] = useState<FailedJobRow[]>([]);
+  const admin = isAdmin(role);
+
+  const load = useCallback(async () => {
+    try {
+      const d = await jsonOrThrow(await fetch("/api/jobs"));
+      setJobs((d.failed as FailedJobRow[]) ?? []);
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function retry(id: string) {
+    await fetch(`/api/jobs/${id}/retry`, { method: "POST" });
+    load();
+  }
+
+  return (
+    <Panel>
+      <h2 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-slate-500">
+        Failed scan jobs {jobs.length > 0 && <span className="text-signal-high">({jobs.length})</span>}
+      </h2>
+      {jobs.length === 0 ? (
+        <p className="text-xs text-slate-600">No failed jobs — the scan queue is healthy.</p>
+      ) : (
+        <ul className="divide-y divide-ink-500/40">
+          {jobs.map((j) => (
+            <li key={j.id} className="flex items-center justify-between gap-2 py-2">
+              <span className="min-w-0">
+                <span className="font-mono text-[11px] text-slate-400">
+                  {j.attempts} attempt{j.attempts === 1 ? "" : "s"}
+                </span>
+                <span className="ml-2 truncate text-xs text-signal-high">
+                  {j.error ?? "unknown error"}
+                </span>
+              </span>
+              {admin && (
+                <button
+                  onClick={() => retry(j.id)}
+                  className="rounded border border-ink-500 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-slate-300 transition hover:border-accent/50 hover:text-accent"
+                >
+                  Retry
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
     </Panel>
   );

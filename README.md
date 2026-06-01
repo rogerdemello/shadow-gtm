@@ -76,7 +76,14 @@ npm run dev                         # http://localhost:3000
 
 **Minimal:** set `GEMINI_API_KEY` and you can add competitors and run real scans
 against the live web (single-tenant JSON store, no auth). That's the whole core
-loop with one key.
+loop with one key. Run `npm run smoke` for a quick live check of the Gemini
+retrieval path (reads a real page + a grounded search).
+
+> **Heads up on Gemini quotas.** Each competitor in a scan makes ~4 Gemini calls
+> (read pricing + homepage via URL-context, one grounded search, one extraction).
+> The **free tier** allows only ~5 requests/min and ~20/day on `gemini-2.5-flash`
+> — enough to try a competitor or two; a real watchlist needs a paid tier.
+> Rate-limit (429) errors are retried automatically and surfaced cleanly.
 
 **Full SaaS mode:** provision a Supabase project, set the keys below, and apply
 the migrations (`npm run db:migrate`) — you then get auth, multi-tenant

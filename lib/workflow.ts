@@ -8,7 +8,7 @@ import type {
 } from "./types";
 import { fetchPage, fetchPageRendered, serpSearch } from "./brightdata";
 import { htmlToText } from "./html";
-import { extractSignals } from "./ai";
+import { extractSignals, PROMPT_VERSION } from "./ai";
 import { hash, id } from "./store";
 import type { Store } from "./store.supabase";
 import { emailConfigured, sendEmail } from "./email";
@@ -176,6 +176,7 @@ export async function scanCompany(
       tokensOut: usage.outputTokens,
       scanId,
       companyId: company.id,
+      promptVersion: PROMPT_VERSION,
     });
 
     // 3c. Alert on signals crossing the org's opportunity threshold. Runs only

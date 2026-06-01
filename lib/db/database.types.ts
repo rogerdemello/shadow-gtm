@@ -124,12 +124,12 @@ export interface Database {
         {
           id: string; org_id: string; kind: string; tokens_in: number;
           tokens_out: number; units: number; scan_id: string | null;
-          company_id: string | null; created_at: Timestamp;
+          company_id: string | null; prompt_version: string | null; created_at: Timestamp;
         },
         {
           id?: string; org_id: string; kind: string; tokens_in?: number;
           tokens_out?: number; units?: number; scan_id?: string | null;
-          company_id?: string | null; created_at?: Timestamp;
+          company_id?: string | null; prompt_version?: string | null; created_at?: Timestamp;
         },
         Record<string, never>
       >;

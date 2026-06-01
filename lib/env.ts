@@ -20,6 +20,8 @@ const EnvSchema = z.object({
   // ── Google Gemini ──────────────────────────────────────────────────────
   GEMINI_API_KEY: z.string().min(1).optional(),
   GEMINI_MODEL: z.string().min(1).default("gemini-2.5-flash"),
+  /** Optional secondary model for extraction fallback (e.g. gemini-2.5-pro). */
+  GEMINI_MODEL_FALLBACK: z.string().min(1).optional(),
   /** Thinking-budget cap in tokens. Empty/undefined → model default; 0 disables. */
   GEMINI_THINKING_BUDGET: z
     .string()

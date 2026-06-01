@@ -115,6 +115,8 @@ export interface UsageEvent {
   units?: number;
   scanId?: string | null;
   companyId?: string | null;
+  /** Prompt/schema version attributed to this event (extraction calls). */
+  promptVersion?: string | null;
 }
 
 /** An in-app alert surfaced in the dashboard (and source for email digests). */

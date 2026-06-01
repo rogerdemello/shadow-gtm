@@ -17,6 +17,13 @@ const log = logger.child({ module: "ai" });
 // on demand. System prompts are stable and supplied via systemInstruction.
 
 const MODEL = getEnv().GEMINI_MODEL;
+/** Optional secondary model; extractSignals falls back to it if the primary
+ *  fails (transient errors / quota). Unset → no fallback. */
+const FALLBACK_MODEL = getEnv().GEMINI_MODEL_FALLBACK;
+
+/** Bump when the extraction prompt or schema changes. Stamped on usage_events so
+ *  prompt/model changes are attributable in metering and eval comparisons. */
+export const PROMPT_VERSION = "2026-06-01.1";
 
 // Optional thinking-budget override (tokens). Gemini 2.5 decides dynamically by
 // default; set GEMINI_THINKING_BUDGET=0 to disable thinking for the snappiest
@@ -229,21 +236,40 @@ ${serpBlock}
 
 Return structured signals. Use the URLs above as sourceUrl values.`;
 
-  const response = await withRetry(
-    () =>
-      client().models.generateContent({
-        model: MODEL,
-        contents: userContent,
-        config: {
-          systemInstruction: ANALYST_SYSTEM,
-          responseMimeType: "application/json",
-          responseSchema: EXTRACTION_RESPONSE_SCHEMA,
-          maxOutputTokens: 8192,
-          ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
-        },
-      }),
-    { label: "gemini:extract", shouldRetry: isTransient },
-  );
+  const extractCall = (model: string) =>
+    client().models.generateContent({
+      model,
+      contents: userContent,
+      config: {
+        systemInstruction: ANALYST_SYSTEM,
+        responseMimeType: "application/json",
+        responseSchema: EXTRACTION_RESPONSE_SCHEMA,
+        maxOutputTokens: 8192,
+        ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
+      },
+    });
+
+  let response;
+  try {
+    response = await withRetry(() => extractCall(MODEL), {
+      label: "gemini:extract",
+      shouldRetry: isTransient,
+    });
+  } catch (err) {
+    if (!FALLBACK_MODEL) throw err;
+    // Primary exhausted its retries — try the fallback model once (with its own
+    // retry budget) before giving up. Keeps extraction resilient to model-level
+    // outages/quota without masking a genuine bad request.
+    log.warn("extract: primary model failed, using fallback", {
+      model: MODEL,
+      fallback: FALLBACK_MODEL,
+      error: (err as Error).message,
+    });
+    response = await withRetry(() => extractCall(FALLBACK_MODEL), {
+      label: "gemini:extract:fallback",
+      shouldRetry: isTransient,
+    });
+  }
 
   const usage = usageOf(response);
   const raw = response.text;

@@ -182,6 +182,16 @@ export async function replaceCompanySignals(
   });
 }
 
+export async function setSignalStatus(
+  signalId: string,
+  status: Signal["status"],
+): Promise<void> {
+  return mutate((db) => {
+    const s = db.signals.find((x) => x.id === signalId);
+    if (s) s.status = status ?? "active";
+  });
+}
+
 // ── Scans ───────────────────────────────────────────────────────────────────
 export async function createScan(companyIds: string[]): Promise<Scan> {
   const scan: Scan = {

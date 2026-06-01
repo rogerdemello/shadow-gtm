@@ -136,6 +136,26 @@ export default function Dashboard() {
     [loadState, loadTrends],
   );
 
+  const setSignalStatus = useCallback(
+    async (signalId: string, status: Signal["status"]) => {
+      // Optimistic: update in place, then persist (re-sync on failure).
+      setSignals((prev) =>
+        prev.map((s) => (s.id === signalId ? { ...s, status } : s)),
+      );
+      try {
+        const res = await fetch(`/api/signals/${signalId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        });
+        if (!res.ok) await loadState();
+      } catch {
+        await loadState();
+      }
+    },
+    [loadState],
+  );
+
   const scanEsRef = useRef<EventSource | null>(null);
   const runScan = useCallback(() => {
     setError(null);
@@ -513,6 +533,7 @@ export default function Dashboard() {
                 signals={signals}
                 scanningName={scanningName}
                 onEvidence={setEvidenceSignal}
+                onSetStatus={setSignalStatus}
               />
             </ErrorBoundary>
           </div>

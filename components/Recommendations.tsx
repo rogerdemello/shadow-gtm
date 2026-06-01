@@ -4,7 +4,9 @@ import type { Signal } from "@/lib/types";
 import { ScorePill, SignalTag } from "./bits";
 
 export default function Recommendations({ signals }: { signals: Signal[] }) {
-  const top = [...signals]
+  // Dismissed signals shouldn't surface as recommended plays.
+  const top = signals
+    .filter((s) => (s.status ?? "active") !== "dismissed")
     .sort((a, b) => b.opportunityScore - a.opportunityScore)
     .slice(0, 5);
 
@@ -16,7 +18,8 @@ export default function Recommendations({ signals }: { signals: Signal[] }) {
 
       {top.length === 0 ? (
         <p className="text-sm leading-snug text-slate-600">
-          Ranked plays appear here after a scan. <span className="text-accent/70">Try with demo data</span> in the header to see them populated.
+          Ranked plays appear here after a scan — every signal scored by
+          opportunity, highest first.
         </p>
       ) : (
         <ol className="space-y-2">

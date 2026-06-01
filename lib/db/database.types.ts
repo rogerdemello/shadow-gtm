@@ -17,6 +17,7 @@ export type MemberRoleEnum = "owner" | "admin" | "member";
 export type JobStatusEnum = "pending" | "running" | "done" | "failed";
 export type ScheduleCadenceEnum = "hourly" | "daily" | "weekly";
 export type PlanTierEnum = "free" | "startup" | "growth" | "enterprise";
+export type SignalStatusEnum = "active" | "handled" | "dismissed";
 
 type Timestamp = string;
 
@@ -87,16 +88,16 @@ export interface Database {
           scan_id: string | null; type: SignalTypeEnum; description: string; impact: ImpactEnum;
           confidence: number; opportunity_score: number; reasoning: string;
           recommended_action: string; source_url: string; quote: string | null;
-          is_current: boolean; created_at: Timestamp;
+          is_current: boolean; status: SignalStatusEnum; created_at: Timestamp;
         },
         {
           id?: string; org_id: string; company_id: string; company_name: string;
           scan_id?: string | null; type: SignalTypeEnum; description: string; impact: ImpactEnum;
           confidence: number; opportunity_score: number; reasoning: string;
           recommended_action: string; source_url: string; quote?: string | null;
-          is_current?: boolean; created_at?: Timestamp;
+          is_current?: boolean; status?: SignalStatusEnum; created_at?: Timestamp;
         },
-        { is_current?: boolean }
+        { is_current?: boolean; status?: SignalStatusEnum }
       >;
       scan_evidence: Table<
         {

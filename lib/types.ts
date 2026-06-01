@@ -14,6 +14,9 @@ export type SignalType =
 
 export type Impact = "high" | "medium" | "low";
 
+/** Where a signal sits in the team's workflow. New signals are "active". */
+export type SignalStatus = "active" | "handled" | "dismissed";
+
 export interface Company {
   id: string;
   name: string;
@@ -60,6 +63,8 @@ export interface Signal {
    *  "Evidence" panel so claims are auditable. May be empty if the model
    *  couldn't isolate a single quote (e.g. pure pattern across many sources). */
   quote?: string;
+  /** Workflow status — defaults to "active" when unset (e.g. fresh from a scan). */
+  status?: SignalStatus;
   createdAt: string;
 }
 

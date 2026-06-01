@@ -76,6 +76,7 @@ describe("rowToSignal", () => {
     source_url: "https://acme.com/pricing",
     quote: "Starter is now $79/mo",
     is_current: true,
+    status: "active" as const,
     created_at: "2026-05-30T00:00:00.000Z",
   };
 
@@ -94,6 +95,7 @@ describe("rowToSignal", () => {
       recommendedAction: "Run a migration campaign",
       sourceUrl: "https://acme.com/pricing",
       quote: "Starter is now $79/mo",
+      status: "active",
       createdAt: "2026-05-30T00:00:00.000Z",
     });
   });

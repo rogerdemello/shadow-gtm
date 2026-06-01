@@ -1,9 +1,31 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Signal, SignalType } from "@/lib/types";
+import type { Signal, SignalStatus, SignalType } from "@/lib/types";
 import { SIGNAL_META, timeAgo } from "@/lib/ui";
 import { ImpactDot, ScorePill, SignalTag } from "./bits";
+
+const statusOf = (s: Signal): SignalStatus => s.status ?? "active";
+
+function StatusBtn({
+  label,
+  title,
+  onClick,
+}: {
+  label: string;
+  title: string;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className="rounded border border-ink-500 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-slate-500 opacity-0 transition hover:border-accent/50 hover:text-accent group-hover:opacity-100"
+    >
+      {label}
+    </button>
+  );
+}
 
 const ALL_TYPES = [
   "pricing",
@@ -20,12 +42,15 @@ export default function IntelligenceFeed({
   signals,
   scanningName,
   onEvidence,
+  onSetStatus,
 }: {
   signals: Signal[];
   scanningName: string | null;
   onEvidence: (signal: Signal) => void;
+  onSetStatus?: (signalId: string, status: SignalStatus) => void;
 }) {
   const [active, setActive] = useState<Set<SignalType>>(new Set());
+  const [showDismissed, setShowDismissed] = useState(false);
 
   const present = useMemo(() => {
     const s = new Set<SignalType>();
@@ -33,10 +58,18 @@ export default function IntelligenceFeed({
     return s;
   }, [signals]);
 
+  const dismissedCount = useMemo(
+    () => signals.filter((s) => statusOf(s) === "dismissed").length,
+    [signals],
+  );
+
   const filtered = useMemo(() => {
-    if (active.size === 0) return signals;
-    return signals.filter((s) => active.has(s.type));
-  }, [signals, active]);
+    return signals.filter((s) => {
+      if (!showDismissed && statusOf(s) === "dismissed") return false;
+      if (active.size > 0 && !active.has(s.type)) return false;
+      return true;
+    });
+  }, [signals, active, showDismissed]);
 
   const toggle = (t: SignalType) => {
     setActive((cur) => {
@@ -92,6 +125,14 @@ export default function IntelligenceFeed({
               clear
             </button>
           )}
+          {dismissedCount > 0 && (
+            <button
+              onClick={() => setShowDismissed((v) => !v)}
+              className="ml-auto rounded-full border border-ink-500 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-slate-400 hover:text-slate-200"
+            >
+              {showDismissed ? "hide" : "show"} dismissed ({dismissedCount})
+            </button>
+          )}
         </div>
       )}
 
@@ -107,9 +148,9 @@ export default function IntelligenceFeed({
           <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 px-6 text-center text-sm text-slate-600">
             <span className="text-3xl">📡</span>
             <p>
-              No signals yet. Add competitors and run an intelligence scan —
-              or hit <span className="font-mono text-accent/80">✦ Try with demo data</span> in
-              the header to see a populated feed.
+              No signals yet. Add a competitor on the left, then hit{" "}
+              <span className="font-mono text-accent/80">▶ Run intelligence scan</span> —
+              Gemini reads the live web and the feed fills in.
             </p>
           </div>
         )}
@@ -124,7 +165,13 @@ export default function IntelligenceFeed({
           <article
             key={s.id}
             onClick={() => onEvidence(s)}
-            className="group animate-fadeUp cursor-pointer rounded-lg border border-ink-500/50 bg-ink-700/40 p-3 transition hover:border-accent/40 hover:bg-ink-700/60"
+            className={`group animate-fadeUp cursor-pointer rounded-lg border p-3 transition hover:bg-ink-700/60 ${
+              statusOf(s) === "dismissed"
+                ? "border-ink-500/40 bg-ink-700/20 opacity-50"
+                : statusOf(s) === "handled"
+                  ? "border-accent/30 bg-ink-700/40"
+                  : "border-ink-500/50 bg-ink-700/40 hover:border-accent/40"
+            }`}
             title="Click for evidence — verbatim quote and source"
           >
             <header className="mb-1.5 flex flex-wrap items-center gap-2">
@@ -132,6 +179,16 @@ export default function IntelligenceFeed({
               <span className="text-sm font-semibold text-slate-100">
                 {s.companyName}
               </span>
+              {statusOf(s) === "handled" && (
+                <span className="rounded bg-accent/15 px-1 font-mono text-[9px] font-bold uppercase text-accent">
+                  ✓ handled
+                </span>
+              )}
+              {statusOf(s) === "dismissed" && (
+                <span className="rounded bg-ink-900/60 px-1 font-mono text-[9px] font-bold uppercase text-slate-500">
+                  dismissed
+                </span>
+              )}
               <ImpactDot impact={s.impact} />
               <span className="ml-auto flex items-center gap-2">
                 <span className="font-mono text-[10px] text-slate-500">
@@ -181,9 +238,39 @@ export default function IntelligenceFeed({
                   ↗ {s.sourceUrl}
                 </a>
               )}
-              <span className="ml-auto font-mono text-[10px] text-slate-600 opacity-0 transition group-hover:opacity-100">
-                show evidence →
-              </span>
+              {onSetStatus && (
+                <span className="ml-auto flex items-center gap-1">
+                  {statusOf(s) !== "handled" && (
+                    <StatusBtn
+                      label="✓ handled"
+                      title="Mark this signal handled"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSetStatus(s.id, "handled");
+                      }}
+                    />
+                  )}
+                  {statusOf(s) !== "dismissed" ? (
+                    <StatusBtn
+                      label="✕ dismiss"
+                      title="Dismiss this signal"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSetStatus(s.id, "dismissed");
+                      }}
+                    />
+                  ) : (
+                    <StatusBtn
+                      label="↺ restore"
+                      title="Restore to active"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSetStatus(s.id, "active");
+                      }}
+                    />
+                  )}
+                </span>
+              )}
             </footer>
           </article>
         ))}

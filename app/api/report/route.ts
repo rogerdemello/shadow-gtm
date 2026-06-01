@@ -11,11 +11,13 @@ export async function GET() {
   if (r.res) return r.res;
   const store = r.store;
 
-  const [companies, signals, evidence] = await Promise.all([
+  const [companies, allSignals, evidence] = await Promise.all([
     store.listCompanies(),
     store.listSignals(),
     store.listEvidence(),
   ]);
+  // Exclude dismissed signals from the brief.
+  const signals = allSignals.filter((s) => (s.status ?? "active") !== "dismissed");
 
   const today = new Date().toISOString().slice(0, 10);
   const lines: string[] = [];

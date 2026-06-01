@@ -11,6 +11,10 @@ import { htmlToText } from "./html";
 import { extractSignals } from "./ai";
 import { hash, id } from "./store";
 import type { Store } from "./store.supabase";
+import { emailConfigured, sendEmail } from "./email";
+import { signalAlertEmail } from "./email/templates";
+import { appUrl } from "./env";
+import { logger } from "./logger";
 
 // ── The core loop ───────────────────────────────────────────────────────────
 //   live web (Bright Data) → diff vs last scan → AI signals + reasoning → store
@@ -161,8 +165,10 @@ export async function scanCompany(
     // 3c. Alert on signals crossing the org's opportunity threshold. Runs only
     //     when extraction ran (the cache-skip path returns earlier), so we don't
     //     re-notify when nothing changed.
-    const threshold = await store.getAlertThreshold();
-    const alerts = signals.filter((s) => s.opportunityScore >= threshold);
+    const rule = await store.getAlertRule();
+    const alerts = signals
+      .filter((s) => s.opportunityScore >= rule.minOpportunity)
+      .sort((a, b) => b.opportunityScore - a.opportunityScore);
     if (alerts.length) {
       await store.createNotifications(
         alerts.map((s) => ({
@@ -174,6 +180,14 @@ export async function scanCompany(
           opportunityScore: s.opportunityScore,
         })),
       );
+
+      // Email channel (opt-in via alert settings). Best-effort — never block the
+      // scan; no-ops when Resend isn't configured.
+      if (rule.channels.includes("email") && emailConfigured()) {
+        await dispatchSignalEmail(store, company, alerts).catch((e) =>
+          logger.warn("signal email dispatch failed", { error: (e as Error).message }),
+        );
+      }
     }
 
     // 4. Persist what fed this scan so the evidence panel can show it.
@@ -191,6 +205,19 @@ export async function scanCompany(
   } catch (err) {
     return { ...base, error: (err as Error).message };
   }
+}
+
+/** Email the org's members about a company's high-opportunity signals. */
+async function dispatchSignalEmail(
+  store: Store,
+  company: Company,
+  alerts: Signal[],
+): Promise<void> {
+  const members = await store.listMembers();
+  const to = members.map((m) => m.email).filter((e): e is string => Boolean(e));
+  if (to.length === 0) return;
+  const { subject, html } = signalAlertEmail(company, alerts, appUrl());
+  await sendEmail({ to, subject, html });
 }
 
 // Re-export for callers that just want the type ergonomics.

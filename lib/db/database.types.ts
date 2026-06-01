@@ -170,13 +170,16 @@ export interface Database {
       alert_rules: Table<
         {
           org_id: string; min_opportunity: number; channels: string[];
-          digest_enabled: boolean; created_at: Timestamp;
+          digest_enabled: boolean; last_digest_at: Timestamp | null; created_at: Timestamp;
         },
         {
           org_id: string; min_opportunity?: number; channels?: string[];
-          digest_enabled?: boolean; created_at?: Timestamp;
+          digest_enabled?: boolean; last_digest_at?: Timestamp | null; created_at?: Timestamp;
         },
-        { min_opportunity?: number; channels?: string[]; digest_enabled?: boolean }
+        {
+          min_opportunity?: number; channels?: string[]; digest_enabled?: boolean;
+          last_digest_at?: Timestamp | null;
+        }
       >;
       notifications: Table<
         {

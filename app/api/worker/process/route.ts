@@ -8,6 +8,7 @@ import {
   completeJob,
   enqueueDueFromSchedules,
   failJob,
+  sendDueDigests,
 } from "@/lib/jobs";
 import { logger } from "@/lib/logger";
 
@@ -42,6 +43,9 @@ export async function POST(req: Request) {
   // 1. Turn due schedules into queued jobs.
   const enqueued = await enqueueDueFromSchedules(db);
 
+  // 1b. Send any due weekly digests (no-op when email isn't configured).
+  const digests = await sendDueDigests(db);
+
   // 2. Claim and process due jobs.
   const jobs = await claimDueJobs(db, 10);
   let done = 0;
@@ -71,6 +75,6 @@ export async function POST(req: Request) {
     }
   }
 
-  log.info("worker run", { enqueued, claimed: jobs.length, done, failed });
-  return NextResponse.json({ enqueued, claimed: jobs.length, done, failed });
+  log.info("worker run", { enqueued, digests, claimed: jobs.length, done, failed });
+  return NextResponse.json({ enqueued, digests, claimed: jobs.length, done, failed });
 }

@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, JobStatusEnum, ScheduleCadenceEnum } from "./db/database.types";
 import { logger } from "./logger";
+import { storeFor } from "./store.supabase";
+import { emailConfigured, sendEmail } from "./email";
+import { weeklyDigestEmail } from "./email/templates";
+import { appUrl } from "./env";
 
 // ── Background scan queue ─────────────────────────────────────────────────────
 // Cross-org queue operations for the worker, run through the service-role client
@@ -152,4 +156,57 @@ export async function enqueueDueFromSchedules(db: Db): Promise<number> {
   }
   log.info("enqueueDueFromSchedules", { schedules: due.length, enqueued });
   return enqueued;
+}
+
+const DIGEST_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Send the weekly digest to orgs that have it enabled and are due (never sent
+ *  or >7 days ago). No-ops entirely when email isn't configured. Returns the
+ *  number of orgs processed. Best-effort per org; one failure doesn't stop the rest. */
+export async function sendDueDigests(db: Db): Promise<number> {
+  if (!emailConfigured()) return 0;
+
+  const cutoffIso = new Date(Date.now() - DIGEST_INTERVAL_MS).toISOString();
+  const { data: rules, error } = await db
+    .from("alert_rules")
+    .select("org_id, last_digest_at")
+    .eq("digest_enabled", true);
+  if (error) {
+    log.error("sendDueDigests select failed", error);
+    return 0;
+  }
+
+  let processed = 0;
+  for (const rule of rules ?? []) {
+    if (rule.last_digest_at && rule.last_digest_at > cutoffIso) continue;
+    try {
+      const store = storeFor({ db, orgId: rule.org_id, userId: null });
+      const [companies, signals, members] = await Promise.all([
+        store.listCompanies(),
+        store.listSignals(),
+        store.listMembers(),
+      ]);
+      const to = members.map((m) => m.email).filter((e): e is string => Boolean(e));
+      const org = await store.getOrgSettings();
+
+      if (to.length > 0) {
+        const topPlays = [...signals]
+          .sort((a, b) => b.opportunityScore - a.opportunityScore)
+          .slice(0, 5);
+        const { subject, html } = weeklyDigestEmail(org.name, topPlays, companies.length, appUrl());
+        await sendEmail({ to, subject, html });
+      }
+
+      // Mark sent even with no recipients, so we don't re-check this org all week.
+      await db
+        .from("alert_rules")
+        .update({ last_digest_at: new Date().toISOString() })
+        .eq("org_id", rule.org_id);
+      processed++;
+    } catch (err) {
+      log.error("sendDueDigests failed for org", err as Error, { orgId: rule.org_id });
+    }
+  }
+  log.info("sendDueDigests", { processed });
+  return processed;
 }

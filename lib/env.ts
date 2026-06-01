@@ -53,6 +53,15 @@ const EnvSchema = z.object({
 
   /** Shared secret the cron trigger uses to authorize the worker route. */
   WORKER_SECRET: z.string().min(1).optional(),
+
+  // ── Email (Resend) ─────────────────────────────────────────────────────────
+  /** Resend API key. When absent, email is logged-skipped (no-op). */
+  RESEND_API_KEY: z.string().min(1).optional(),
+  /** Verified sender, e.g. "Shadow GTM <alerts@yourdomain.com>". */
+  EMAIL_FROM: z.string().min(1).optional(),
+
+  /** Public base URL for links in emails (e.g. https://app.example.com). */
+  APP_URL: z.url().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -111,6 +120,18 @@ export function scrapingBrowserConfigured(): boolean {
 export function supabaseConfigured(): boolean {
   const e = getEnv();
   return Boolean(e.NEXT_PUBLIC_SUPABASE_URL && e.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+/** True once Resend is configured (API key + verified sender). When false, the
+ *  email layer no-ops so scans/digests still run keyless. */
+export function emailConfigured(): boolean {
+  const e = getEnv();
+  return Boolean(e.RESEND_API_KEY && e.EMAIL_FROM);
+}
+
+/** Best base URL for links in emails. Falls back to APP_URL → localhost. */
+export function appUrl(): string {
+  return getEnv().APP_URL || "http://localhost:3000";
 }
 
 /** For tests: drop the cached parse so a mutated process.env is re-read. */

@@ -12,9 +12,9 @@ export default function AboutPage() {
         about it — grounded in a verbatim quote from the source.
       </p>
       <p className="text-sm leading-relaxed text-slate-400">
-        The whole product runs on one loop: live web data via Bright Data, a diff against the last
-        scan, reasoning with Google&apos;s Gemini, and a ranked, explained play. Every claim is
-        auditable; every scan compounds a historical data moat.
+        The whole product runs on one loop: live web data via Gemini grounding (Google Search +
+        URL context), a diff against the last scan, reasoning with Gemini, and a ranked, explained
+        play. Every claim is auditable; every scan compounds a historical data moat.
       </p>
       <p className="text-sm leading-relaxed text-slate-400">
         It is built as a real multi-tenant SaaS — isolated workspaces, roles, autonomous

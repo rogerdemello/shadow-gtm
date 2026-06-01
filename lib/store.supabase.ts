@@ -54,7 +54,6 @@ export interface Store {
     name: string;
     domain: string;
     pricingUrl?: string;
-    renderJs?: boolean;
   }): Promise<Company>;
   removeCompany(companyId: string): Promise<void>;
   getCompany(companyId: string): Promise<Company | undefined>;
@@ -90,13 +89,6 @@ export interface Store {
   createNotifications(items: NewNotification[]): Promise<void>;
   listNotifications(limit?: number): Promise<Notification[]>;
   markNotificationsRead(ids: string[]): Promise<void>;
-
-  loadSeedBundle(bundle: {
-    companies: Company[];
-    signals: Signal[];
-    evidence: ScanEvidence[];
-    battlecards: Battlecard[];
-  }): Promise<void>;
 
   // ── Team & settings (Phase 8) ──────────────────────────────────────────────
   /** This user's role in the active org (null if not a member). */
@@ -201,7 +193,6 @@ export function storeFor(ctx: StoreContext): Store {
         name: input.name.trim(),
         domain,
         pricing_url: input.pricingUrl?.trim() || `https://${domain}/pricing`,
-        render_js: Boolean(input.renderJs),
         created_by: userId,
       };
       const { data, error } = await db
@@ -852,85 +843,7 @@ export function storeFor(ctx: StoreContext): Store {
       fail("deleteOrg", error);
     },
 
-    // ── Demo seed ─────────────────────────────────────────────────────────────
-    async loadSeedBundle(bundle) {
-      // Replace the calling org's state only. Delete companies first; cascades
-      // clear dependent rows, then re-insert the bundle under this org.
-      const { error: delErr } = await db
-        .from("companies")
-        .delete()
-        .eq("org_id", orgId);
-      fail("loadSeedBundle.clear", delErr);
-
-      if (bundle.companies.length) {
-        const { error } = await db.from("companies").insert(
-          bundle.companies.map((c) => ({
-            id: c.id,
-            org_id: orgId,
-            name: c.name,
-            domain: c.domain,
-            pricing_url: c.pricingUrl,
-            render_js: Boolean(c.renderJs),
-            created_by: userId,
-            created_at: c.createdAt,
-          })),
-        );
-        fail("loadSeedBundle.companies", error);
-      }
-
-      // Signals/evidence carry a scan_id (FK → scans). Create the referenced
-      // scan rows first so the seed inserts satisfy the constraint.
-      const scanIds = [
-        ...new Set(
-          [
-            ...bundle.signals.map((s) => s.scanId),
-            ...bundle.evidence.map((e) => e.scanId),
-          ].filter((x): x is string => Boolean(x)),
-        ),
-      ];
-      if (scanIds.length) {
-        const { error } = await db.from("scans").insert(
-          scanIds.map((sid) => ({
-            id: sid,
-            org_id: orgId,
-            company_ids: bundle.companies.map((c) => c.id),
-            signal_count: bundle.signals.length,
-          })),
-        );
-        fail("loadSeedBundle.scans", error);
-      }
-
-      if (bundle.signals.length) {
-        await this.batchInsertSeedSignals(bundle.signals);
-      }
-      for (const ev of bundle.evidence) await this.saveEvidence(ev);
-      for (const card of bundle.battlecards) await this.saveBattlecard(card);
-    },
-
-    // Internal helper kept off the public interface but reachable via `this`.
-    async batchInsertSeedSignals(signals: Signal[]) {
-      const rows: Tables["signals"]["Insert"][] = signals.map((s) => ({
-        id: s.id,
-        org_id: orgId,
-        company_id: s.companyId,
-        company_name: s.companyName,
-        scan_id: s.scanId,
-        type: s.type,
-        description: s.description,
-        impact: s.impact,
-        confidence: s.confidence,
-        opportunity_score: s.opportunityScore,
-        reasoning: s.reasoning,
-        recommended_action: s.recommendedAction,
-        source_url: s.sourceUrl,
-        quote: s.quote ?? null,
-        is_current: true,
-        created_at: s.createdAt,
-      }));
-      const { error } = await db.from("signals").insert(rows);
-      fail("loadSeedBundle.signals", error);
-    },
-  } as Store & { batchInsertSeedSignals(signals: Signal[]): Promise<void> };
+  };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -974,7 +887,6 @@ export function rowToCompany(r: Tables["companies"]["Row"]): Company {
     name: r.name,
     domain: r.domain,
     pricingUrl: r.pricing_url,
-    renderJs: r.render_js,
     createdAt: r.created_at,
   };
 }

@@ -105,7 +105,6 @@ export async function addCompany(input: {
   name: string;
   domain: string;
   pricingUrl?: string;
-  renderJs?: boolean;
 }): Promise<Company> {
   const domain = normalizeDomain(input.domain);
   const company: Company = {
@@ -113,7 +112,6 @@ export async function addCompany(input: {
     name: input.name.trim(),
     domain,
     pricingUrl: input.pricingUrl?.trim() || `https://${domain}/pricing`,
-    renderJs: Boolean(input.renderJs),
     createdAt: new Date().toISOString(),
   };
   return mutate((db) => {
@@ -214,25 +212,6 @@ export async function getEvidence(
   companyId: string,
 ): Promise<ScanEvidence | undefined> {
   return (await readDb()).evidence.find((e) => e.companyId === companyId);
-}
-
-// ── Demo seed ─────────────────────────────────────────────────────────────
-/** Replace ALL state with a bundled snapshot — used by the "Load demo" button.
- *  Caller's responsibility to ask the user before overwriting real work. */
-export async function loadSeedBundle(bundle: {
-  companies: Company[];
-  signals: Signal[];
-  evidence: ScanEvidence[];
-  battlecards: Battlecard[];
-}): Promise<void> {
-  return mutate((db) => {
-    db.companies = bundle.companies;
-    db.signals = bundle.signals;
-    db.evidence = bundle.evidence;
-    db.battlecards = bundle.battlecards;
-    db.snapshots = [];
-    db.scans = [];
-  });
 }
 
 // ── Battlecards ───────────────────────────────────────────────────────────

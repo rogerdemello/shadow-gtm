@@ -18,7 +18,6 @@ export async function POST(req: Request) {
     name?: string;
     domain?: string;
     pricingUrl?: string;
-    renderJs?: boolean;
   };
   try {
     body = await req.json();
@@ -58,7 +57,6 @@ export async function POST(req: Request) {
       name,
       domain,
       pricingUrl: body.pricingUrl,
-      renderJs: body.renderJs,
     });
     return NextResponse.json({ company }, { status: 201 });
   } catch (err) {

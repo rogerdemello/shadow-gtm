@@ -1,10 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  brightDataConfigured,
-  geminiConfigured,
-  getEnv,
-  supabaseConfigured,
-} from "@/lib/env";
+import { geminiConfigured, getEnv, supabaseConfigured } from "@/lib/env";
 import { getServiceClient } from "@/lib/db/service";
 import { activeRegion } from "@/lib/region";
 
@@ -16,7 +11,6 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const checks: Record<string, unknown> = {
     gemini: geminiConfigured(),
-    brightData: brightDataConfigured(),
     supabase: supabaseConfigured(),
     region: activeRegion(),
   };

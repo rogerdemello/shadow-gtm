@@ -26,10 +26,8 @@ interface AttackPlan {
 }
 
 interface Config {
-  brightData: boolean;
   gemini: boolean;
-  mock: boolean;
-  scrapingBrowser: boolean;
+  supabase: boolean;
 }
 
 async function safeJson(res: Response): Promise<Record<string, unknown>> {
@@ -100,14 +98,14 @@ export default function Dashboard() {
   }, [loadState, loadTrends]);
 
   const addCompany = useCallback(
-    async (name: string, domain: string, pricingUrl?: string, renderJs?: boolean) => {
+    async (name: string, domain: string, pricingUrl?: string) => {
       setBusy(true);
       setError(null);
       try {
         const res = await fetch("/api/companies", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, domain, pricingUrl, renderJs }),
+          body: JSON.stringify({ name, domain, pricingUrl }),
         });
         if (!res.ok) {
           const data = await safeJson(res);
@@ -137,30 +135,6 @@ export default function Dashboard() {
     },
     [loadState, loadTrends],
   );
-
-  const loadDemo = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    // Close any open modals + cancel streams so they don't show stale state.
-    bcAbortRef.current?.abort();
-    warAbortRef.current?.abort();
-    bcAbortRef.current = null;
-    warAbortRef.current = null;
-    setCard(null);
-    setWarOpen(false);
-    setWarPlan(null);
-    setEvidenceSignal(null);
-    try {
-      const res = await fetch("/api/seed", { method: "POST" });
-      if (!res.ok) throw new Error("Seed failed");
-      await loadState();
-      loadTrends();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }, [loadState, loadTrends]);
 
   const scanEsRef = useRef<EventSource | null>(null);
   const runScan = useCallback(() => {
@@ -447,16 +421,6 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-3">
           <LiveDot active={scanning} />
-          {empty && (
-            <button
-              onClick={loadDemo}
-              disabled={busy}
-              className="rounded-lg border border-accent/40 px-4 py-2.5 text-sm font-bold text-accent transition hover:bg-accent/10 disabled:opacity-40"
-              title="Populate the dashboard with curated sample intelligence so you can explore without keys."
-            >
-              ✦ Try with demo data
-            </button>
-          )}
           <a
             href="/api/report"
             download
@@ -496,18 +460,14 @@ export default function Dashboard() {
         <Stat label="avg score" value={String(avgScore)} />
         {lastScanIso && <Stat label="last scan" value={shortAgo(lastScanIso)} />}
         <span className="ml-auto flex items-center gap-2">
-          <Pill
-            ok={config?.brightData ?? false}
-            text={config?.mock ? "Bright Data · MOCK" : "Bright Data · LIVE"}
-          />
           <Pill ok={config?.gemini ?? false} text="Gemini · key" />
         </span>
       </div>
 
-      {config?.mock && (
+      {config && !config.gemini && (
         <div className="mb-4 rounded-lg border border-signal-mid/30 bg-signal-mid/5 px-3 py-2 text-xs text-signal-mid">
-          Running in mock mode (no <code>BRIGHTDATA_API_TOKEN</code>). Scans use
-          sample pages. Set credentials in <code>.env.local</code> to go live.
+          No <code>GEMINI_API_KEY</code> set. Scans read the live web and reason
+          through the Gemini API — add a key in <code>.env.local</code> to run one.
         </div>
       )}
 
@@ -527,7 +487,6 @@ export default function Dashboard() {
             onAdd={addCompany}
             existingDomains={companies.map((c) => c.domain)}
             busy={busy}
-            scrapingBrowser={config?.scrapingBrowser ?? false}
           />
           <Recommendations signals={signals} />
         </div>
@@ -593,16 +552,7 @@ export default function Dashboard() {
 
       <footer className="mt-8 flex flex-wrap items-center justify-between gap-2 border-t border-ink-500/40 pt-4 font-mono text-[10px] uppercase tracking-widest text-slate-600">
         <span>
-          live web ·{" "}
-          <a
-            href="https://brightdata.com"
-            target="_blank"
-            rel="noreferrer"
-            className="text-slate-400 hover:text-accent"
-          >
-            Bright Data
-          </a>{" "}
-          · reasoning ·{" "}
+          live web + reasoning ·{" "}
           <a
             href="https://ai.google.dev/gemini-api"
             target="_blank"

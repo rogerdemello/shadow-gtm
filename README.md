@@ -1,14 +1,14 @@
 # ◢ Shadow GTM
 
 **Autonomous web intelligence for revenue teams.** Shadow GTM watches the live
-web through [Bright Data](https://brightdata.com), reasons over what it finds
-with Google's Gemini, and turns competitor movement into **ranked, explained GTM
-plays** — not another summarizer, an analyst.
+web with [Google's Gemini](https://ai.google.dev/gemini-api) — reading competitor
+pages and searching the web through its grounding tools — and turns competitor
+movement into **ranked, explained GTM plays** — not another summarizer, an analyst.
 
 The one loop the whole product runs on:
 
 ```
-live web (Bright Data) → diff vs last scan → AI signals + reasoning → ranked play
+live web (Gemini grounding) → diff vs last scan → AI signals + reasoning → ranked play
 ```
 
 Most tools tell you *"Competitor raised prices."* Shadow GTM tells you
@@ -26,7 +26,7 @@ governance story.
 ## Features
 
 **Intelligence**
-- **Watchlist + live scans** — fetch each competitor's pricing page *and* homepage via Bright Data Web Unlocker, pull news/reviews/hiring/intent via the SERP API, render JS-heavy sites through the Scraping Browser, diff against the last scan, and extract scored, reasoned signals with Gemini. Results stream into the feed live (SSE).
+- **Watchlist + live scans** — Gemini reads each competitor's pricing page *and* homepage (URL-context tool) and pulls news/reviews/hiring/intent via Google Search grounding, diffs against the last scan, and extracts scored, reasoned signals — all real, cited, live web data. Results stream into the feed live (SSE).
 - **Auditable evidence** — every signal carries a verbatim source quote; every fetched page is fingerprinted (URL + SHA-256 + timestamp) in an immutable audit trail.
 - **Battlecards & War Room** — stream a Markdown sales battlecard from a competitor's signals, or type an attack directive for a full, signal-grounded campaign plan.
 - **Trends & momentum** — append-only signal history powers opportunity-over-time charts, per-competitor momentum, and matrix sparklines (Recharts).
@@ -40,15 +40,18 @@ governance story.
 - **Public REST API** — org-scoped API keys (`/api/v1/companies`, `/signals`, `/trends`) and outbound webhooks.
 - **Governance** — usage metering, a dead-letter view with retry, data export (GDPR portability), one-click workspace deletion, and a legal pack (Terms / Privacy / DPA).
 
-**Try it with zero setup** — hit *✦ Try with demo data* on an empty dashboard to load a curated HubSpot / Clay / Apollo bundle. No keys required to explore the UI.
+## Web data (Gemini grounding)
 
-## Bright Data integration
+All live web data comes straight from the Gemini API — no scraping infrastructure,
+one key:
 
-| Product | Where it's used |
+| Capability | Where it's used |
 |---|---|
-| **Web Unlocker** | `lib/brightdata.ts → fetchPage()` — competitor pricing/site pages, past bot detection (default fetch path). |
-| **SERP API** | `lib/brightdata.ts → serpSearch()` — structured Google results (`brd_json`) for buying-intent / news signals. |
-| **Scraping Browser** | `lib/brightdata.ts → fetchPageRendered()` — full Chrome rendering over CDP (`puppeteer-core`) for JS-heavy sites. Mark a competitor **"JS-heavy"** in the UI to route it here. |
+| **URL context** | `lib/retrieval.ts → fetchPageText()` — Gemini reads a competitor's pricing/home page and returns its real content, which we hash + diff. |
+| **Google Search grounding** | `lib/retrieval.ts → searchWeb()` — live, cited news / reviews / hiring / funding / intent findings. |
+
+Retrieval (grounding tools) and signal extraction (structured JSON) are separate
+Gemini calls, since the two can't be combined in one request.
 
 ## Tech
 
@@ -59,7 +62,7 @@ governance story.
 - **Stripe** billing, **Resend** email, **Sentry** error reporting — each behind a config flag.
 - **Swappable store** — every read/write goes through one `Store` interface (`lib/store.supabase.ts`), with a keyless JSON fallback (`lib/store.ts`) for the demo.
 
-> Every external service is optional: with no keys set, the app builds, tests, and runs in a keyless demo / Free-plan mode. Configuration only *adds* capability.
+> A scan needs only a Gemini key. Everything else (Supabase, Stripe, Resend, Slack, Sentry, SSO) is optional and behind a config flag — with no keys, the app builds, tests, and runs (single-tenant, Free plan). Configuration only *adds* capability.
 
 ---
 
@@ -71,9 +74,9 @@ cp .env.local.example .env.local   # fill in keys (all optional — see below)
 npm run dev                         # http://localhost:3000
 ```
 
-**Keyless demo:** with no Supabase keys, the app runs single-tenant against a JSON
-store and synthetic pages — hit *Try with demo data* to explore. Add
-`GEMINI_API_KEY` to get real AI; add Bright Data keys to scan the live web.
+**Minimal:** set `GEMINI_API_KEY` and you can add competitors and run real scans
+against the live web (single-tenant JSON store, no auth). That's the whole core
+loop with one key.
 
 **Full SaaS mode:** provision a Supabase project, set the keys below, and apply
 the migrations (`npm run db:migrate`) — you then get auth, multi-tenant
@@ -82,17 +85,11 @@ workspaces, scheduling, alerts, billing, and the API.
 ### Configuration
 
 ```ini
-# ── AI (Gemini) ──────────────────────────────────────────────
+# ── AI (Gemini) — the only key a scan needs (retrieval + reasoning) ─
 GEMINI_API_KEY=                 # Google AI Studio → aistudio.google.com/apikey
 GEMINI_MODEL=gemini-2.5-flash   # gemini-2.5-pro for deeper reasoning
 GEMINI_MODEL_FALLBACK=          # optional secondary model on failure
 GEMINI_THINKING_BUDGET=         # optional token cap; 0 disables thinking
-
-# ── Bright Data ──────────────────────────────────────────────
-BRIGHTDATA_API_TOKEN=           # empty → mock mode (synthetic pages)
-BRIGHTDATA_UNLOCKER_ZONE=web_unlocker1
-BRIGHTDATA_SERP_ZONE=serp_api1
-BRIGHTDATA_BROWSER_WS=          # Scraping Browser CDP endpoint (optional)
 
 # ── Supabase (enables the full SaaS: auth, tenancy, scheduling) ─
 NEXT_PUBLIC_SUPABASE_URL=
@@ -136,13 +133,13 @@ app/
   (legal)/                 # terms, privacy, dpa
   api/
     scan/stream · battlecard · warroom · evidence   # core (SSE where streamed)
-    companies · state · seed · report · trends · audit
+    companies · state · report · trends · audit
     members · invitations · org · alert-rules · usage  # team & settings
     billing/{checkout,portal,webhook} · integrations · webhooks · api-keys
     worker/process · jobs · health · v1/*              # automation, ops, public API
 components/                # dashboard, feed, matrix, charts, modals, settings, marketing
 lib/
-  brightdata.ts ai.ts workflow.ts            # scan loop: collect → diff → reason
+  retrieval.ts ai.ts workflow.ts             # scan loop: Gemini grounding → diff → reason
   store.ts store.supabase.ts store-context.ts# Store interface + JSON/Supabase impls
   plans.ts quota.ts billing.ts               # tiers + usage caps + Stripe
   email.ts email/ integrations/ apikey.ts    # alerts + channels + public API auth

@@ -5,7 +5,7 @@ export const metadata: Metadata = { title: "Features — Shadow GTM" };
 const SECTIONS = [
   {
     h: "Live competitive monitoring",
-    p: "Add competitors by name + domain. Each scan fetches their pricing page and homepage through Bright Data's Web Unlocker, pulls news/reviews/hiring/intent via the SERP API, and renders JS-heavy sites through the Scraping Browser.",
+    p: "Add competitors by name + domain. Each scan reads their pricing page and homepage via Gemini's URL-context tool and pulls news/reviews/hiring/intent through Google Search grounding — real, cited, live web data with just a Gemini key.",
   },
   {
     h: "Reasoned signals, not summaries",

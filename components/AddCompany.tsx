@@ -13,31 +13,22 @@ export default function AddCompany({
   onAdd,
   existingDomains,
   busy,
-  scrapingBrowser,
 }: {
-  onAdd: (
-    name: string,
-    domain: string,
-    pricingUrl?: string,
-    renderJs?: boolean,
-  ) => Promise<void>;
+  onAdd: (name: string, domain: string, pricingUrl?: string) => Promise<void>;
   existingDomains: string[];
   busy: boolean;
-  scrapingBrowser: boolean;
 }) {
   const [name, setName] = useState("");
   const [domain, setDomain] = useState("");
   const [pricingUrl, setPricingUrl] = useState("");
-  const [renderJs, setRenderJs] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !domain.trim()) return;
-    await onAdd(name.trim(), domain.trim(), pricingUrl.trim() || undefined, renderJs);
+    await onAdd(name.trim(), domain.trim(), pricingUrl.trim() || undefined);
     setName("");
     setDomain("");
     setPricingUrl("");
-    setRenderJs(false);
   }
 
   const normalize = (d: string) =>
@@ -71,30 +62,6 @@ export default function AddCompany({
           placeholder="Page to monitor (optional — defaults to /pricing)"
           className="w-full rounded-lg border border-ink-500 bg-ink-700 px-3 py-2 text-sm outline-none placeholder:text-slate-600 focus:border-accent/60"
         />
-        <label
-          className={`flex items-center gap-2 font-mono text-[11px] ${
-            scrapingBrowser
-              ? "cursor-pointer text-slate-400"
-              : "cursor-not-allowed text-slate-600"
-          }`}
-          title={
-            scrapingBrowser
-              ? "Render with Bright Data Scraping Browser"
-              : "Set BRIGHTDATA_BROWSER_WS in .env.local to enable"
-          }
-        >
-          <input
-            type="checkbox"
-            checked={renderJs && scrapingBrowser}
-            disabled={!scrapingBrowser}
-            onChange={(e) => setRenderJs(e.target.checked)}
-            className="accent-accent disabled:opacity-40"
-          />
-          ⚡ JS-heavy site — render via Scraping Browser
-          {!scrapingBrowser && (
-            <span className="text-signal-mid">(endpoint not configured)</span>
-          )}
-        </label>
         <button
           type="submit"
           disabled={busy || !name.trim() || !domain.trim()}

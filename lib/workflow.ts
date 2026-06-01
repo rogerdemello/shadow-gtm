@@ -6,7 +6,7 @@ import type {
   Signal,
   Snapshot,
 } from "./types";
-import { fetchPage, fetchPageRendered, serpSearch } from "./brightdata";
+import { fetchPageText, searchWeb } from "./retrieval";
 import { htmlToText } from "./html";
 import { extractSignals, PROMPT_VERSION } from "./ai";
 import { hash, id } from "./store";
@@ -20,7 +20,7 @@ import { SCAN_USAGE_KIND, scanQuotaStatus, startOfMonthIso } from "./quota";
 import { dispatchSignalIntegrations } from "./integrations/dispatch";
 
 // ── The core loop ───────────────────────────────────────────────────────────
-//   live web (Bright Data) → diff vs last scan → AI signals + reasoning → store
+//   live web (Gemini grounding) → diff vs last scan → AI signals + reasoning → store
 // This is the one workflow the whole product (and demo) revolves around.
 
 /** Line-level diff summary good enough to feed the model "what changed".
@@ -60,9 +60,9 @@ async function fetchAndDiff(
   pageType: PageType,
   url: string,
 ): Promise<FetchedPage> {
-  const fetcher = company.renderJs ? fetchPageRendered : fetchPage;
-  const html = await fetcher(url);
-  const text = htmlToText(html);
+  // Gemini reads the live page (URL-context tool) and returns its text. We still
+  // run it through htmlToText to normalize whitespace/entities for stable diffs.
+  const text = htmlToText(await fetchPageText(url));
   const newHash = hash(text);
   const prev = await store.latestSnapshot(company.id, pageType);
   const changed = !prev || prev.hash !== newHash;
@@ -106,8 +106,8 @@ export async function scanCompany(
     const pricingP = fetchAndDiff(store, company, "pricing", company.pricingUrl);
     const homepageP = fetchAndDiff(store, company, "homepage", homepageUrlFor(company))
       .catch(() => null);
-    const serpP = serpSearch(
-      `${company.name} pricing OR alternatives OR layoffs OR funding OR reviews`,
+    const serpP = searchWeb(
+      `${company.name} (${company.domain}) — pricing changes, product launches, funding, hiring, reviews, alternatives`,
       8,
     ).catch(() => []);
 

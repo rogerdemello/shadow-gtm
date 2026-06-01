@@ -35,8 +35,8 @@ jobs:
         run: npm test
 
       # `next build` also runs the TypeScript compiler. No API keys are needed:
-      # all AI/Bright Data calls happen at request time, never during the build,
-      # and lib/env applies safe defaults (mock mode) when keys are absent.
+      # all Gemini calls happen at request time, never during the build, and
+      # lib/env treats every provider key as optional.
       - name: Build
         run: npm run build
         env:

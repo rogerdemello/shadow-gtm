@@ -20,8 +20,6 @@ export interface Company {
   domain: string;
   /** Page we diff + extract pricing signals from. Defaults to https://domain/pricing */
   pricingUrl: string;
-  /** Render via Bright Data Scraping Browser (for JS-heavy / interactive sites). */
-  renderJs?: boolean;
   createdAt: string;
 }
 
@@ -63,6 +61,13 @@ export interface Signal {
    *  couldn't isolate a single quote (e.g. pure pattern across many sources). */
   quote?: string;
   createdAt: string;
+}
+
+/** A single web finding (news/review/intent) gathered via Google Search grounding. */
+export interface SerpResult {
+  title: string;
+  link: string;
+  snippet: string;
 }
 
 export interface SerpEvidence {
@@ -107,7 +112,7 @@ export interface ScanCompanyResult {
   error?: string;
 }
 
-/** A metered operation (Gemini call, Bright Data fetch, …) for cost + quotas. */
+/** A metered operation (Gemini extraction/retrieval, API request, …) for cost + quotas. */
 export interface UsageEvent {
   kind: string;
   tokensIn?: number;

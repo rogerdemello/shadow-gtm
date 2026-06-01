@@ -7,10 +7,11 @@ import { z } from "zod";
 //
 // Server-only: this reads secrets, so never import it into a client component.
 //
-// Most keys are optional by design — the app runs in "mock mode" (synthetic
-// pages + SERP) when the Bright Data token is absent, and the dashboard shows
-// which providers are live via the *Configured() helpers below. Keys that ARE
-// present are still format-validated so a typo surfaces at boot, not mid-scan.
+// Most keys are optional by design — a scan needs only GEMINI_API_KEY (Gemini
+// does retrieval + reasoning); Supabase/Stripe/Resend/Sentry/SSO add capability.
+// The dashboard shows which providers are live via the *Configured() helpers
+// below. Keys that ARE present are still format-validated so a typo surfaces at
+// boot, not mid-scan.
 
 const EnvSchema = z.object({
   NODE_ENV: z
@@ -31,16 +32,6 @@ const EnvSchema = z.object({
       const n = Number(raw);
       return Number.isNaN(n) ? undefined : n;
     }),
-
-  // ── Bright Data ──────────────────────────────────────────────────────────
-  BRIGHTDATA_API_TOKEN: z.string().min(1).optional(),
-  BRIGHTDATA_UNLOCKER_ZONE: z.string().min(1).default("web_unlocker1"),
-  BRIGHTDATA_SERP_ZONE: z.string().min(1).default("serp_api1"),
-  /** Scraping Browser CDP endpoint (wss://…) — required only for renderJs sites. */
-  BRIGHTDATA_BROWSER_WS: z.url().optional(),
-
-  /** "1" forces synthetic pages/SERP — offline UI work without spending credits. */
-  SHADOW_GTM_MOCK: z.enum(["0", "1"]).optional(),
 
   /** Set by Vercel at runtime; switches the JSON store to a writable /tmp dir. */
   VERCEL: z.string().optional(),
@@ -84,12 +75,12 @@ export type Env = z.infer<typeof EnvSchema>;
 let _env: Env | null = null;
 
 /** Parse + validate process.env once, lazily. Throws a readable error on a bad
- *  value (e.g. a malformed BRIGHTDATA_BROWSER_WS url) the first time env is read. */
+ *  value (e.g. a malformed NEXT_PUBLIC_SUPABASE_URL) the first time env is read. */
 export function getEnv(): Env {
   if (_env) return _env;
   // Treat an empty-string env var as unset (matches shell/.env semantics where
   // `KEY=` means "no value"). Without this, optional() wouldn't catch "" and a
-  // blank BRIGHTDATA_BROWSER_WS= line would fail url validation at boot.
+  // blank URL line (e.g. NEXT_PUBLIC_SUPABASE_URL=) would fail url validation.
   const cleaned: Record<string, string | undefined> = {};
   for (const [k, v] of Object.entries(process.env)) {
     cleaned[k] = v === "" ? undefined : v;
@@ -111,24 +102,10 @@ export const env: Env = new Proxy({} as Env, {
 
 // ── Provider-status helpers (single source of truth for the UI pills) ────────
 
-/** Mock mode is on when explicitly set OR when no Bright Data token is present. */
-export function isMockMode(): boolean {
-  const e = getEnv();
-  return e.SHADOW_GTM_MOCK === "1" || !e.BRIGHTDATA_API_TOKEN;
-}
-
+/** Gemini powers both retrieval (grounding) and reasoning — the one key a scan
+ *  needs. When false, the dashboard shows the key is missing and scans can't run. */
 export function geminiConfigured(): boolean {
   return Boolean(getEnv().GEMINI_API_KEY);
-}
-
-export function brightDataConfigured(): boolean {
-  const e = getEnv();
-  return Boolean(e.BRIGHTDATA_API_TOKEN) && e.SHADOW_GTM_MOCK !== "1";
-}
-
-export function scrapingBrowserConfigured(): boolean {
-  const e = getEnv();
-  return Boolean(e.BRIGHTDATA_BROWSER_WS) && e.SHADOW_GTM_MOCK !== "1";
 }
 
 /** True once the Supabase project URL + anon key are present (auth + data layer). */

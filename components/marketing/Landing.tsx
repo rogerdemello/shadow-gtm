@@ -5,7 +5,7 @@ import { getTranslator } from "@/lib/i18n";
 const FEATURES = [
   {
     title: "Live web → ranked plays",
-    body: "Monitor competitors through Bright Data, diff every scan, and let Gemini turn movement into ranked, explained GTM plays — not summaries.",
+    body: "Gemini reads competitor pages and searches the live web (grounded), diffs every scan, and turns movement into ranked, explained GTM plays — not summaries.",
   },
   {
     title: "Auditable by design",
@@ -61,7 +61,7 @@ export default function Landing() {
 
       {/* The loop */}
       <section className="mx-auto mb-12 max-w-2xl rounded-xl border border-ink-500/60 bg-ink-800/60 p-5 text-center font-mono text-sm text-slate-400">
-        live web (Bright Data) → diff vs last scan → <span className="text-accent">AI signals + reasoning</span> → ranked play
+        live web (Gemini grounding) → diff vs last scan → <span className="text-accent">AI signals + reasoning</span> → ranked play
       </section>
 
       {/* Features grid */}

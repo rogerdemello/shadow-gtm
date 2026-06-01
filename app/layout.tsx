@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Shadow GTM — Live Web Intelligence for Revenue Teams",
   description:
-    "Autonomous AI agents that monitor the live web via Bright Data and turn competitor movement into ranked GTM plays.",
+    "Autonomous AI that monitors the live web with Gemini grounding and turns competitor movement into ranked, explained GTM plays.",
 };
 
 export default function RootLayout({

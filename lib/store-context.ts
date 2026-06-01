@@ -44,7 +44,6 @@ const jsonStore: Store = {
   getEvidence: json.getEvidence,
   saveBattlecard: json.saveBattlecard,
   getBattlecard: json.getBattlecard,
-  loadSeedBundle: json.loadSeedBundle,
   // The keyless JSON demo doesn't meter usage or alert.
   recordUsage: async () => {},
   getAlertThreshold: async () => 70,

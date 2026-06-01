@@ -1,7 +1,7 @@
 import { logger } from "./logger";
 
 // ── Retry with exponential backoff ────────────────────────────────────────────
-// Wraps a flaky async call (Gemini, Bright Data) so transient failures —
+// Wraps a flaky async call (Gemini retrieval/extraction, webhooks) so transient failures —
 // timeouts, 429s, 5xx — retry a few times with jittered backoff before giving
 // up. Permanent failures (auth, bad request) should set shouldRetry=false so we
 // fail fast instead of hammering. Errors are logged, never swallowed.

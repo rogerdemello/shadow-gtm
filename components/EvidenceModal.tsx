@@ -113,7 +113,7 @@ export default function EvidenceModal({
               )}
 
               {evidence.sources.length > 0 && (
-                <Section title="Pages monitored (Bright Data)">
+                <Section title="Pages monitored">
                   <ul className="space-y-1">
                     {evidence.sources.map((s) => (
                       <li
@@ -138,7 +138,7 @@ export default function EvidenceModal({
               )}
 
               {evidence.serp.length > 0 && (
-                <Section title="SERP context (Bright Data)">
+                <Section title="Web search context (Google Search grounding)">
                   <ul className="space-y-2">
                     {evidence.serp.slice(0, 5).map((s, i) => (
                       <li

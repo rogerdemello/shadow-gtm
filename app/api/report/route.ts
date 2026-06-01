@@ -24,7 +24,7 @@ export async function GET() {
   lines.push(`*Generated ${today} · ${companies.length} competitors · ${signals.length} signals*`);
   lines.push("");
   lines.push(
-    `> Powered by live web data via [Bright Data](https://brightdata.com) and reasoning via [Gemini](https://ai.google.dev/gemini-api).`,
+    `> Powered by live web data + reasoning via [Gemini](https://ai.google.dev/gemini-api) (Google Search grounding + URL context).`,
   );
   lines.push("");
 
@@ -80,7 +80,7 @@ export async function GET() {
     }
 
     if (ev?.sources?.length) {
-      lines.push(`**Pages monitored** (Bright Data):`);
+      lines.push(`**Pages monitored:**`);
       ev.sources.forEach((s) =>
         lines.push(`- \`${s.pageType}\` — ${s.url}`),
       );

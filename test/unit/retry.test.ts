@@ -37,7 +37,7 @@ describe("withRetry", () => {
 describe("isTransient", () => {
   it("retries timeouts and 5xx", () => {
     expect(isTransient(new Error("request timed out after 60000ms"))).toBe(true);
-    expect(isTransient(new Error("Bright Data 503 on zone"))).toBe(true);
+    expect(isTransient(new Error("Gemini 503 service unavailable"))).toBe(true);
     expect(isTransient(new Error("socket hang up"))).toBe(true);
   });
 

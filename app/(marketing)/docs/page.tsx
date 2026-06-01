@@ -13,9 +13,8 @@ export default function DocsOverviewPage() {
 
       <h2>1. Build your watchlist</h2>
       <p>
-        Add competitors by name + domain on the dashboard. Mark a competitor &quot;JS-heavy&quot; to
-        render it through Bright Data&apos;s Scraping Browser. Your plan sets how many competitors
-        you can track.
+        Add competitors by name + domain on the dashboard. Your plan sets how many competitors you
+        can track.
       </p>
 
       <h2>2. Run an intelligence scan</h2>

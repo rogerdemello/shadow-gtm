@@ -1,7 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { z } from "zod";
-import type { Company, PageType, Signal, SignalType } from "./types";
-import type { SerpResult } from "./brightdata";
+import type { Company, PageType, SerpResult, Signal, SignalType } from "./types";
 import { id } from "./store";
 import { clip } from "./html";
 import { getEnv, geminiConfigured as envGeminiConfigured } from "./env";

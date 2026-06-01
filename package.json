@@ -2,7 +2,7 @@
   "name": "shadow-gtm",
   "version": "0.1.0",
   "private": true,
-  "description": "Autonomous AI GTM intelligence — monitors the live web via Bright Data and turns competitor movement into ranked revenue plays.",
+  "description": "Autonomous AI GTM intelligence — monitors the live web with Gemini grounding and turns competitor movement into ranked revenue plays.",
   "license": "MIT",
   "engines": {
     "node": ">=20"
@@ -24,7 +24,6 @@
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.106.2",
     "next": "^16.2.6",
-    "puppeteer-core": "^25.0.4",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "recharts": "^3.8.1",

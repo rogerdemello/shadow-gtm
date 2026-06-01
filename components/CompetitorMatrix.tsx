@@ -46,6 +46,7 @@ export default function CompetitorMatrix({
   scanningId,
   sparklines,
   onBattlecard,
+  onDossier,
   onRemove,
 }: {
   companies: Company[];
@@ -54,6 +55,7 @@ export default function CompetitorMatrix({
   /** Per-company opportunity-over-time values for the momentum sparkline. */
   sparklines?: Record<string, number[]>;
   onBattlecard: (company: Company) => void;
+  onDossier: (company: Company) => void;
   onRemove: (companyId: string) => void;
 }) {
   return (
@@ -136,6 +138,13 @@ export default function CompetitorMatrix({
                         title="Generate a sales battlecard from this company's signals"
                       >
                         Battlecard
+                      </button>
+                      <button
+                        onClick={() => onDossier(c)}
+                        className="rounded border border-ink-500 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-slate-300 transition hover:border-signal-info/60 hover:text-signal-info"
+                        title="Run the deep-dive research agent on this competitor"
+                      >
+                        Deep dive
                       </button>
                       <button
                         onClick={() => onRemove(c.id)}

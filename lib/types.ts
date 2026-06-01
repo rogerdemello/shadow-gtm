@@ -109,6 +109,21 @@ export interface Battlecard {
   createdAt: string;
 }
 
+/** A multi-step research dossier on a competitor (agentic deep dive). */
+export interface Dossier {
+  id: string;
+  companyId: string;
+  companyName: string;
+  markdown: string;
+  createdAt: string;
+}
+
+/** One planned research angle the dossier agent will investigate. */
+export interface DossierTask {
+  dimension: string;
+  query: string;
+}
+
 export interface ScanCompanyResult {
   companyId: string;
   companyName: string;

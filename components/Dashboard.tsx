@@ -18,6 +18,14 @@ const TrendsPanel = dynamic(() => import("./TrendsPanel"));
 const BattlecardModal = dynamic(() => import("./BattlecardModal"));
 const WarRoomModal = dynamic(() => import("./WarRoomModal"));
 const EvidenceModal = dynamic(() => import("./EvidenceModal"));
+const DossierModal = dynamic(() => import("./DossierModal"));
+
+interface DossierState {
+  company: Company;
+  markdown: string | null;
+  steps: string[];
+  loading: boolean;
+}
 
 interface AttackPlan {
   markdown: string;
@@ -59,6 +67,9 @@ export default function Dashboard() {
   const [warOpen, setWarOpen] = useState(false);
   const [warPlan, setWarPlan] = useState<AttackPlan | null>(null);
   const [warLoading, setWarLoading] = useState(false);
+
+  const [dossier, setDossier] = useState<DossierState | null>(null);
+  const dossierAbortRef = useRef<AbortController | null>(null);
 
   const [evidenceSignal, setEvidenceSignal] = useState<Signal | null>(null);
 
@@ -386,20 +397,121 @@ export default function Dashboard() {
     setWarLoading(false);
   }, []);
 
+  // ── Deep-dive dossier (agentic) ───────────────────────────────────────────
+  const streamDossier = useCallback(async (company: Company) => {
+    dossierAbortRef.current?.abort();
+    const ac = new AbortController();
+    dossierAbortRef.current = ac;
+    setDossier({ company, markdown: "", steps: [], loading: true });
+
+    try {
+      const res = await fetch("/api/dossier", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: company.id }),
+        signal: ac.signal,
+      });
+      if (!res.ok) {
+        const data = await safeJson(res);
+        throw new Error(
+          (typeof data.error === "string" && data.error) || `Deep dive failed (${res.status})`,
+        );
+      }
+
+      let acc = "";
+      const steps: string[] = [];
+      for await (const ev of readSSE<
+        | { type: "plan"; tasks: { dimension: string }[] }
+        | { type: "gather"; dimension: string; found: number }
+        | { type: "synthesis" }
+        | { type: "delta"; text: string }
+        | { type: "done"; markdown: string }
+        | { type: "error"; error: string }
+      >(res, ac.signal)) {
+        if (ac.signal.aborted) return;
+        if (ev.type === "plan") {
+          steps.push(`Planned ${ev.tasks.length} research angles`);
+          setDossier({ company, markdown: "", steps: [...steps], loading: true });
+        } else if (ev.type === "gather") {
+          steps.push(`Researched ${ev.dimension} — ${ev.found} finding${ev.found === 1 ? "" : "s"}`);
+          setDossier({ company, markdown: "", steps: [...steps], loading: true });
+        } else if (ev.type === "synthesis") {
+          steps.push("Synthesizing dossier…");
+          setDossier({ company, markdown: "", steps: [...steps], loading: true });
+        } else if (ev.type === "delta") {
+          acc += ev.text;
+          setDossier({ company, markdown: acc, steps: [...steps], loading: true });
+        } else if (ev.type === "error") {
+          throw new Error(ev.error);
+        } else if (ev.type === "done") {
+          setDossier({ company, markdown: ev.markdown, steps: [...steps], loading: false });
+        }
+      }
+    } catch (e) {
+      if (ac.signal.aborted) return;
+      setDossier({
+        company,
+        markdown: `**Error:** ${(e as Error).message}`,
+        steps: [],
+        loading: false,
+      });
+    } finally {
+      if (dossierAbortRef.current === ac) dossierAbortRef.current = null;
+    }
+  }, []);
+
+  const openDossier = useCallback(
+    async (company: Company) => {
+      dossierAbortRef.current?.abort();
+      const ac = new AbortController();
+      dossierAbortRef.current = ac;
+      setDossier({ company, markdown: null, steps: [], loading: true });
+      try {
+        const res = await fetch(
+          `/api/dossier?companyId=${encodeURIComponent(company.id)}`,
+          { signal: ac.signal },
+        );
+        if (ac.signal.aborted) return;
+        if (res.ok) {
+          const data = await safeJson(res);
+          const d = data.dossier as { markdown?: string } | null | undefined;
+          if (d?.markdown) {
+            setDossier({ company, markdown: d.markdown, steps: [], loading: false });
+            return;
+          }
+        }
+      } catch {
+        if (ac.signal.aborted) return;
+      } finally {
+        if (dossierAbortRef.current === ac) dossierAbortRef.current = null;
+      }
+      // No cached dossier — run the agent.
+      await streamDossier(company);
+    },
+    [streamDossier],
+  );
+
+  const closeDossier = useCallback(() => {
+    dossierAbortRef.current?.abort();
+    dossierAbortRef.current = null;
+    setDossier(null);
+  }, []);
+
   // Esc closes whichever modal is open and cancels any in-flight stream.
   useEffect(() => {
-    if (!card && !warOpen && !evidenceSignal) return;
+    if (!card && !warOpen && !evidenceSignal && !dossier) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       bcAbortRef.current?.abort();
       bcAbortRef.current = null;
       setCard(null);
       closeWarRoom();
+      closeDossier();
       setEvidenceSignal(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [card, warOpen, evidenceSignal, closeWarRoom]);
+  }, [card, warOpen, evidenceSignal, dossier, closeWarRoom, closeDossier]);
 
   const highImpact = signals.filter((s) => s.impact === "high").length;
   const avgScore = signals.length
@@ -519,6 +631,7 @@ export default function Dashboard() {
               scanningId={scanningId}
               sparklines={sparklines}
               onBattlecard={openBattlecard}
+              onDossier={openDossier}
               onRemove={removeCompany}
             />
           </ErrorBoundary>
@@ -568,6 +681,17 @@ export default function Dashboard() {
         <EvidenceModal
           signal={evidenceSignal}
           onClose={() => setEvidenceSignal(null)}
+        />
+      )}
+
+      {dossier && (
+        <DossierModal
+          companyName={dossier.company.name}
+          markdown={dossier.markdown}
+          steps={dossier.steps}
+          loading={dossier.loading}
+          onClose={closeDossier}
+          onRegenerate={() => streamDossier(dossier.company)}
         />
       )}
 

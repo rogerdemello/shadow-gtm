@@ -121,6 +121,17 @@ export interface Database {
         },
         { markdown?: string; company_name?: string }
       >;
+      dossiers: Table<
+        {
+          id: string; org_id: string; company_id: string; company_name: string;
+          markdown: string; created_at: Timestamp;
+        },
+        {
+          id?: string; org_id: string; company_id: string; company_name: string;
+          markdown: string; created_at?: Timestamp;
+        },
+        { markdown?: string; company_name?: string }
+      >;
       usage_events: Table<
         {
           id: string; org_id: string; kind: string; tokens_in: number;

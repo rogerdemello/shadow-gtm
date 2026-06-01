@@ -45,6 +45,9 @@ const jsonStore: Store = {
   getEvidence: json.getEvidence,
   saveBattlecard: json.saveBattlecard,
   getBattlecard: json.getBattlecard,
+  // Dossiers aren't persisted in the keyless demo (generated on demand).
+  saveDossier: async () => {},
+  getDossier: async () => undefined,
   // The keyless JSON demo doesn't meter usage or alert.
   recordUsage: async () => {},
   getAlertThreshold: async () => 70,

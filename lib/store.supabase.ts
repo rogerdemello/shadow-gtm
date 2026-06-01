@@ -11,6 +11,7 @@ import type {
   Notification,
   OrgSettings,
   ApiKey,
+  Dossier,
   FailedJob,
   Integration,
   Scan,
@@ -82,6 +83,9 @@ export interface Store {
 
   saveBattlecard(card: Battlecard): Promise<void>;
   getBattlecard(companyId: string): Promise<Battlecard | undefined>;
+
+  saveDossier(d: Dossier): Promise<void>;
+  getDossier(companyId: string): Promise<Dossier | undefined>;
 
   /** Record a metered operation (cost + quota tracking). Best-effort. */
   recordUsage(event: UsageEvent): Promise<void>;
@@ -412,6 +416,31 @@ export function storeFor(ctx: StoreContext): Store {
         .maybeSingle();
       fail("getBattlecard", error);
       return data ? rowToBattlecard(data) : undefined;
+    },
+
+    async saveDossier(d) {
+      const insert: Tables["dossiers"]["Insert"] = {
+        org_id: orgId,
+        company_id: d.companyId,
+        company_name: d.companyName,
+        markdown: d.markdown,
+        created_at: d.createdAt,
+      };
+      const { error } = await db
+        .from("dossiers")
+        .upsert(insert, { onConflict: "org_id,company_id" });
+      fail("saveDossier", error);
+    },
+
+    async getDossier(companyId) {
+      const { data, error } = await db
+        .from("dossiers")
+        .select("*")
+        .eq("org_id", orgId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+      fail("getDossier", error);
+      return data ? rowToDossier(data) : undefined;
     },
 
     // ── Usage metering ──────────────────────────────────────────────────────
@@ -971,6 +1000,16 @@ export function rowToNotification(r: Tables["notifications"]["Row"]): Notificati
 }
 
 export function rowToBattlecard(r: Tables["battlecards"]["Row"]): Battlecard {
+  return {
+    id: r.id,
+    companyId: r.company_id,
+    companyName: r.company_name,
+    markdown: r.markdown,
+    createdAt: r.created_at,
+  };
+}
+
+export function rowToDossier(r: Tables["dossiers"]["Row"]): Dossier {
   return {
     id: r.id,
     companyId: r.company_id,

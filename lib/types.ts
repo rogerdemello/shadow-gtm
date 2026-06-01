@@ -215,3 +215,34 @@ export interface Subscription {
   currentPeriodEnd: string | null;
   stripeCustomerId: string | null;
 }
+
+// ── Integrations (Phase 11) ─────────────────────────────────────────────────
+
+/** A third-party integration (e.g. Slack) configured for an org. */
+export interface Integration {
+  id: string;
+  provider: string;
+  config: Record<string, unknown>;
+  enabled: boolean;
+  createdAt: string;
+}
+
+/** An outbound webhook endpoint. `secret` is omitted from list responses. */
+export interface WebhookEndpoint {
+  id: string;
+  url: string;
+  enabled: boolean;
+  lastStatus: number | null;
+  lastAttemptAt: string | null;
+  createdAt: string;
+}
+
+/** A public-API key. The plaintext is only ever returned at creation. */
+export interface ApiKey {
+  id: string;
+  name: string;
+  prefix: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}

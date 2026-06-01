@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
   AlertRule,
+  ApiKey,
   Invitation,
   Member,
   MemberRole,
@@ -10,10 +11,11 @@ import type {
   PlanId,
   Subscription,
   UsageSummary,
+  WebhookEndpoint,
 } from "@/lib/types";
 import CopyButton from "../CopyButton";
 
-const TABS = ["Organization", "Team", "Billing", "Alerts", "Usage"] as const;
+const TABS = ["Organization", "Team", "Billing", "Integrations", "Alerts", "Usage"] as const;
 type Tab = (typeof TABS)[number];
 
 const isAdmin = (role: MemberRole) => role === "owner" || role === "admin";
@@ -58,6 +60,7 @@ export default function Settings({
       {tab === "Organization" && <OrgTab role={role} initialOrg={initialOrg} />}
       {tab === "Team" && <TeamTab role={role} me={me} />}
       {tab === "Billing" && <BillingTab role={role} />}
+      {tab === "Integrations" && <IntegrationsTab role={role} />}
       {tab === "Alerts" && <AlertsTab />}
       {tab === "Usage" && <UsageTab />}
     </div>
@@ -512,6 +515,310 @@ function BillingTab({ role }: { role: MemberRole }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ── Integrations ─────────────────────────────────────────────────────────────
+
+function IntegrationsTab({ role }: { role: MemberRole }) {
+  const admin = isAdmin(role);
+  return (
+    <div className="space-y-4">
+      <SlackCard admin={admin} />
+      <WebhooksCard admin={admin} />
+      <ApiKeysCard admin={admin} />
+    </div>
+  );
+}
+
+function SlackCard({ admin }: { admin: boolean }) {
+  const [url, setUrl] = useState("");
+  const [connected, setConnected] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "error" | "ok"; text: string } | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const d = await jsonOrThrow(await fetch("/api/integrations/slack"));
+      setConnected(Boolean(d.connected));
+      setUrl((d.webhookUrl as string) ?? "");
+    } catch {
+      /* members without admin get 403 — leave blank */
+    }
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function save() {
+    setMsg(null);
+    try {
+      await jsonOrThrow(
+        await fetch("/api/integrations/slack", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ webhookUrl: url, enabled: true }),
+        }),
+      );
+      setConnected(true);
+      setMsg({ kind: "ok", text: "Slack connected." });
+    } catch (e) {
+      setMsg({ kind: "error", text: (e as Error).message });
+    }
+  }
+  async function disconnect() {
+    await fetch("/api/integrations/slack", { method: "DELETE" });
+    setConnected(false);
+    setUrl("");
+  }
+
+  return (
+    <Panel>
+      <h2 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-slate-500">
+        Slack {connected && <span className="text-accent">· connected</span>}
+      </h2>
+      {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
+      <p className="mb-2 text-xs text-slate-500">
+        Paste an{" "}
+        <a
+          href="https://api.slack.com/messaging/webhooks"
+          target="_blank"
+          rel="noreferrer"
+          className="text-accent hover:underline"
+        >
+          incoming-webhook URL
+        </a>{" "}
+        and enable the &quot;Slack&quot; alert channel to get high-opportunity signals in a channel.
+      </p>
+      {admin ? (
+        <div className="flex flex-wrap gap-2">
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://hooks.slack.com/services/…"
+            className="min-w-[240px] flex-1 rounded border border-ink-500 bg-ink-900 px-3 py-2 font-mono text-xs text-slate-100 outline-none focus:border-accent/60"
+          />
+          <button
+            onClick={save}
+            disabled={!url.trim()}
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-bold text-ink-900 transition hover:brightness-110 disabled:opacity-40"
+          >
+            Save
+          </button>
+          {connected && (
+            <button
+              onClick={disconnect}
+              className="rounded-lg border border-ink-500 px-3 py-2 font-mono text-[11px] uppercase text-slate-400 transition hover:border-signal-high/60 hover:text-signal-high"
+            >
+              Disconnect
+            </button>
+          )}
+        </div>
+      ) : (
+        <p className="text-xs text-slate-600">Only owners/admins can manage integrations.</p>
+      )}
+    </Panel>
+  );
+}
+
+function WebhooksCard({ admin }: { admin: boolean }) {
+  const [hooks, setHooks] = useState<WebhookEndpoint[]>([]);
+  const [url, setUrl] = useState("");
+  const [secret, setSecret] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const d = await jsonOrThrow(await fetch("/api/webhooks"));
+      setHooks((d.webhooks as WebhookEndpoint[]) ?? []);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function add() {
+    setErr(null);
+    setSecret(null);
+    try {
+      const d = await jsonOrThrow(
+        await fetch("/api/webhooks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        }),
+      );
+      setSecret(d.secret as string);
+      setUrl("");
+      load();
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
+  async function del(id: string) {
+    await fetch(`/api/webhooks/${id}`, { method: "DELETE" });
+    load();
+  }
+
+  return (
+    <Panel>
+      <h2 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-slate-500">
+        Outbound webhooks
+      </h2>
+      {err && <Notice kind="error">{err}</Notice>}
+      <p className="mb-2 text-xs text-slate-500">
+        POSTs signed JSON (HMAC-SHA256 in the <code>x-shadowgtm-signature</code> header) on new
+        high-opportunity signals. Enable the &quot;Webhook&quot; alert channel.
+      </p>
+      {secret && (
+        <div className="mb-3 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2">
+          <p className="mb-1 text-[11px] text-slate-400">Signing secret (shown once):</p>
+          <div className="flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-slate-200">
+              {secret}
+            </code>
+            <CopyButton text={secret} label="Copy" />
+          </div>
+        </div>
+      )}
+      {admin && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://your-app.com/hooks/shadow-gtm"
+            className="min-w-[240px] flex-1 rounded border border-ink-500 bg-ink-900 px-3 py-2 font-mono text-xs text-slate-100 outline-none focus:border-accent/60"
+          />
+          <button
+            onClick={add}
+            disabled={!url.trim()}
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-bold text-ink-900 transition hover:brightness-110 disabled:opacity-40"
+          >
+            Add
+          </button>
+        </div>
+      )}
+      <ul className="divide-y divide-ink-500/40">
+        {hooks.map((h) => (
+          <li key={h.id} className="flex items-center justify-between gap-2 py-2">
+            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-slate-300">{h.url}</span>
+            <span className="font-mono text-[10px] text-slate-600">
+              {h.lastStatus ? `last ${h.lastStatus}` : "no delivery"}
+            </span>
+            {admin && (
+              <button
+                onClick={() => del(h.id)}
+                className="rounded border border-ink-500 px-2 py-0.5 font-mono text-[10px] text-slate-500 transition hover:border-signal-high/60 hover:text-signal-high"
+              >
+                Delete
+              </button>
+            )}
+          </li>
+        ))}
+        {hooks.length === 0 && <li className="py-2 text-xs text-slate-600">No endpoints yet.</li>}
+      </ul>
+    </Panel>
+  );
+}
+
+function ApiKeysCard({ admin }: { admin: boolean }) {
+  const [keys, setKeys] = useState<ApiKey[]>([]);
+  const [name, setName] = useState("");
+  const [fresh, setFresh] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const d = await jsonOrThrow(await fetch("/api/api-keys"));
+      setKeys((d.apiKeys as ApiKey[]) ?? []);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function create() {
+    setErr(null);
+    setFresh(null);
+    try {
+      const d = await jsonOrThrow(
+        await fetch("/api/api-keys", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        }),
+      );
+      setFresh(d.key as string);
+      setName("");
+      load();
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
+  async function revoke(id: string) {
+    await fetch(`/api/api-keys/${id}`, { method: "DELETE" });
+    load();
+  }
+
+  return (
+    <Panel>
+      <h2 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-slate-500">
+        API keys
+      </h2>
+      {err && <Notice kind="error">{err}</Notice>}
+      <p className="mb-2 text-xs text-slate-500">
+        Authenticate the public REST API (<code>/api/v1/*</code>) with{" "}
+        <code>Authorization: Bearer &lt;key&gt;</code>.
+      </p>
+      {fresh && (
+        <div className="mb-3 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2">
+          <p className="mb-1 text-[11px] text-slate-400">New key (shown once):</p>
+          <div className="flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-slate-200">{fresh}</code>
+            <CopyButton text={fresh} label="Copy" />
+          </div>
+        </div>
+      )}
+      {admin && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Key name (e.g. Zapier)"
+            className="min-w-[200px] flex-1 rounded border border-ink-500 bg-ink-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-accent/60"
+          />
+          <button
+            onClick={create}
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-bold text-ink-900 transition hover:brightness-110"
+          >
+            Create key
+          </button>
+        </div>
+      )}
+      <ul className="divide-y divide-ink-500/40">
+        {keys.map((k) => (
+          <li key={k.id} className="flex items-center justify-between gap-2 py-2">
+            <span className="min-w-0">
+              <span className="text-sm text-slate-300">{k.name}</span>{" "}
+              <code className="font-mono text-[10px] text-slate-600">{k.prefix}…</code>
+              {k.revokedAt && <span className="ml-2 text-[10px] text-signal-high">revoked</span>}
+            </span>
+            {admin && !k.revokedAt && (
+              <button
+                onClick={() => revoke(k.id)}
+                className="rounded border border-ink-500 px-2 py-0.5 font-mono text-[10px] text-slate-500 transition hover:border-signal-high/60 hover:text-signal-high"
+              >
+                Revoke
+              </button>
+            )}
+          </li>
+        ))}
+        {keys.length === 0 && <li className="py-2 text-xs text-slate-600">No keys yet.</li>}
+      </ul>
+    </Panel>
   );
 }
 

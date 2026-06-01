@@ -210,6 +210,43 @@ export interface Database {
         },
         { role?: MemberRoleEnum; accepted_at?: Timestamp | null }
       >;
+      integrations: Table<
+        {
+          id: string; org_id: string; provider: string; config: unknown;
+          enabled: boolean; created_at: Timestamp;
+        },
+        {
+          id?: string; org_id: string; provider: string; config?: unknown;
+          enabled?: boolean; created_at?: Timestamp;
+        },
+        { config?: unknown; enabled?: boolean }
+      >;
+      webhook_endpoints: Table<
+        {
+          id: string; org_id: string; url: string; secret: string;
+          enabled: boolean; last_status: number | null; last_attempt_at: Timestamp | null;
+          created_at: Timestamp;
+        },
+        {
+          id?: string; org_id: string; url: string; secret: string;
+          enabled?: boolean; last_status?: number | null; last_attempt_at?: Timestamp | null;
+          created_at?: Timestamp;
+        },
+        { enabled?: boolean; last_status?: number | null; last_attempt_at?: Timestamp | null }
+      >;
+      api_keys: Table<
+        {
+          id: string; org_id: string; name: string; key_hash: string; prefix: string;
+          created_by: string | null; last_used_at: Timestamp | null;
+          revoked_at: Timestamp | null; created_at: Timestamp;
+        },
+        {
+          id?: string; org_id: string; name: string; key_hash: string; prefix: string;
+          created_by?: string | null; last_used_at?: Timestamp | null;
+          revoked_at?: Timestamp | null; created_at?: Timestamp;
+        },
+        { last_used_at?: Timestamp | null; revoked_at?: Timestamp | null }
+      >;
       subscriptions: Table<
         {
           org_id: string; plan: PlanTierEnum; status: string;

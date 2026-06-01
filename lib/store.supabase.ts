@@ -10,6 +10,8 @@ import type {
   NewNotification,
   Notification,
   OrgSettings,
+  ApiKey,
+  Integration,
   Scan,
   ScanEvidence,
   SerpEvidence,
@@ -18,6 +20,7 @@ import type {
   Subscription,
   UsageEvent,
   UsageSummary,
+  WebhookEndpoint,
 } from "./types";
 import { DuplicateCompanyError, normalizeDomain } from "./store";
 import { logger } from "./logger";
@@ -129,6 +132,32 @@ export interface Store {
     stripeSubscriptionId: string | null;
     currentPeriodEnd: string | null;
   }): Promise<void>;
+
+  // ── Integrations (Phase 11) ────────────────────────────────────────────────
+  getIntegration(provider: string): Promise<Integration | null>;
+  upsertIntegration(
+    provider: string,
+    config: Record<string, unknown>,
+    enabled: boolean,
+  ): Promise<void>;
+  deleteIntegration(provider: string): Promise<void>;
+  /** Webhook endpoints without secrets (for the settings UI). */
+  listWebhooks(): Promise<WebhookEndpoint[]>;
+  /** Enabled endpoints WITH their signing secret (for dispatch only). */
+  listWebhookTargets(): Promise<
+    { id: string; url: string; secret: string }[]
+  >;
+  createWebhook(input: { url: string; secret: string }): Promise<WebhookEndpoint>;
+  deleteWebhook(id: string): Promise<void>;
+  recordWebhookResult(id: string, status: number): Promise<void>;
+  listApiKeys(): Promise<ApiKey[]>;
+  createApiKey(input: {
+    name: string;
+    keyHash: string;
+    prefix: string;
+    createdBy: string | null;
+  }): Promise<ApiKey>;
+  revokeApiKey(id: string): Promise<void>;
 }
 
 /** Bind the store operations to one org's data through the given client. */
@@ -623,6 +652,118 @@ export function storeFor(ctx: StoreContext): Store {
       fail("upsertSubscription", error);
     },
 
+    // ── Integrations ─────────────────────────────────────────────────────────
+    async getIntegration(provider) {
+      const { data, error } = await db
+        .from("integrations")
+        .select("*")
+        .eq("org_id", orgId)
+        .eq("provider", provider)
+        .maybeSingle();
+      fail("getIntegration", error);
+      return data ? rowToIntegration(data) : null;
+    },
+
+    async upsertIntegration(provider, config, enabled) {
+      const row: Tables["integrations"]["Insert"] = { org_id: orgId, provider, config, enabled };
+      const { error } = await db
+        .from("integrations")
+        .upsert(row, { onConflict: "org_id,provider" });
+      fail("upsertIntegration", error);
+    },
+
+    async deleteIntegration(provider) {
+      const { error } = await db
+        .from("integrations")
+        .delete()
+        .eq("org_id", orgId)
+        .eq("provider", provider);
+      fail("deleteIntegration", error);
+    },
+
+    async listWebhooks() {
+      const { data, error } = await db
+        .from("webhook_endpoints")
+        .select("*")
+        .eq("org_id", orgId)
+        .order("created_at", { ascending: true });
+      fail("listWebhooks", error);
+      return (data ?? []).map(rowToWebhook);
+    },
+
+    async listWebhookTargets() {
+      const { data, error } = await db
+        .from("webhook_endpoints")
+        .select("id, url, secret")
+        .eq("org_id", orgId)
+        .eq("enabled", true);
+      fail("listWebhookTargets", error);
+      return (data ?? []).map((r) => ({ id: r.id, url: r.url, secret: r.secret }));
+    },
+
+    async createWebhook(input) {
+      const { data, error } = await db
+        .from("webhook_endpoints")
+        .insert({ org_id: orgId, url: input.url, secret: input.secret })
+        .select("*")
+        .single();
+      fail("createWebhook", error);
+      return rowToWebhook(data!);
+    },
+
+    async deleteWebhook(id) {
+      const { error } = await db
+        .from("webhook_endpoints")
+        .delete()
+        .eq("org_id", orgId)
+        .eq("id", id);
+      fail("deleteWebhook", error);
+    },
+
+    async recordWebhookResult(id, status) {
+      const { error } = await db
+        .from("webhook_endpoints")
+        .update({ last_status: status, last_attempt_at: new Date().toISOString() })
+        .eq("org_id", orgId)
+        .eq("id", id);
+      if (error) logger.warn("recordWebhookResult failed", { error: error.message });
+    },
+
+    async listApiKeys() {
+      const { data, error } = await db
+        .from("api_keys")
+        .select("*")
+        .eq("org_id", orgId)
+        .order("created_at", { ascending: false });
+      fail("listApiKeys", error);
+      return (data ?? []).map(rowToApiKey);
+    },
+
+    async createApiKey(input) {
+      const { data, error } = await db
+        .from("api_keys")
+        .insert({
+          org_id: orgId,
+          name: input.name,
+          key_hash: input.keyHash,
+          prefix: input.prefix,
+          created_by: input.createdBy,
+        })
+        .select("*")
+        .single();
+      fail("createApiKey", error);
+      return rowToApiKey(data!);
+    },
+
+    async revokeApiKey(id) {
+      const { error } = await db
+        .from("api_keys")
+        .update({ revoked_at: new Date().toISOString() })
+        .eq("org_id", orgId)
+        .eq("id", id);
+      fail("revokeApiKey", error);
+    },
+
     // ── Demo seed ─────────────────────────────────────────────────────────────
     async loadSeedBundle(bundle) {
       // Replace the calling org's state only. Delete companies first; cascades
@@ -836,6 +977,38 @@ export function rowToInvitation(r: Tables["invitations"]["Row"]): Invitation {
     invitedBy: r.invited_by,
     expiresAt: r.expires_at,
     acceptedAt: r.accepted_at,
+    createdAt: r.created_at,
+  };
+}
+
+export function rowToIntegration(r: Tables["integrations"]["Row"]): Integration {
+  return {
+    id: r.id,
+    provider: r.provider,
+    config: (r.config as Record<string, unknown> | null) ?? {},
+    enabled: r.enabled,
+    createdAt: r.created_at,
+  };
+}
+
+export function rowToWebhook(r: Tables["webhook_endpoints"]["Row"]): WebhookEndpoint {
+  return {
+    id: r.id,
+    url: r.url,
+    enabled: r.enabled,
+    lastStatus: r.last_status,
+    lastAttemptAt: r.last_attempt_at,
+    createdAt: r.created_at,
+  };
+}
+
+export function rowToApiKey(r: Tables["api_keys"]["Row"]): ApiKey {
+  return {
+    id: r.id,
+    name: r.name,
+    prefix: r.prefix,
+    lastUsedAt: r.last_used_at,
+    revokedAt: r.revoked_at,
     createdAt: r.created_at,
   };
 }

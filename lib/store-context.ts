@@ -82,6 +82,22 @@ const jsonStore: Store = {
     stripeCustomerId: null,
   }),
   upsertSubscription: async () => {},
+  // Integrations require a configured workspace — inert stubs in the demo.
+  getIntegration: async () => null,
+  upsertIntegration: async () => {},
+  deleteIntegration: async () => {},
+  listWebhooks: async () => [],
+  listWebhookTargets: async () => [],
+  createWebhook: async () => {
+    throw new Error("Webhooks require a configured workspace.");
+  },
+  deleteWebhook: async () => {},
+  recordWebhookResult: async () => {},
+  listApiKeys: async () => [],
+  createApiKey: async () => {
+    throw new Error("API keys require a configured workspace.");
+  },
+  revokeApiKey: async () => {},
 };
 
 /** Resolve the user's active org. For now: their first membership. An explicit

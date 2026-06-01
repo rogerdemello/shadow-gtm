@@ -17,6 +17,7 @@ import { appUrl } from "./env";
 import { logger } from "./logger";
 import { planFor } from "./plans";
 import { SCAN_USAGE_KIND, scanQuotaStatus, startOfMonthIso } from "./quota";
+import { dispatchSignalIntegrations } from "./integrations/dispatch";
 
 // ── The core loop ───────────────────────────────────────────────────────────
 //   live web (Bright Data) → diff vs last scan → AI signals + reasoning → store
@@ -201,6 +202,13 @@ export async function scanCompany(
       if (rule.channels.includes("email") && emailConfigured()) {
         await dispatchSignalEmail(store, company, alerts).catch((e) =>
           logger.warn("signal email dispatch failed", { error: (e as Error).message }),
+        );
+      }
+
+      // Slack / outbound webhooks (opt-in via alert channels + configured per-org).
+      if (rule.channels.includes("slack") || rule.channels.includes("webhook")) {
+        await dispatchSignalIntegrations(store, company, alerts, rule.channels).catch((e) =>
+          logger.warn("integration dispatch failed", { error: (e as Error).message }),
         );
       }
     }

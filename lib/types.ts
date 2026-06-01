@@ -141,3 +141,52 @@ export interface NewNotification {
   body?: string | null;
   opportunityScore?: number | null;
 }
+
+// ── Org / team / settings (Phase 8) ────────────────────────────────────────
+
+export type MemberRole = "owner" | "admin" | "member";
+
+/** A member of an org, joined with their profile email/name for display. */
+export interface Member {
+  userId: string;
+  email: string | null;
+  fullName: string | null;
+  role: MemberRole;
+  createdAt: string;
+}
+
+/** A pending or accepted invitation to join an org. */
+export interface Invitation {
+  id: string;
+  email: string;
+  role: MemberRole;
+  token: string;
+  invitedBy: string | null;
+  expiresAt: string;
+  acceptedAt: string | null;
+  createdAt: string;
+}
+
+/** Editable organization settings. */
+export interface OrgSettings {
+  id: string;
+  name: string;
+  slug: string | null;
+}
+
+/** Per-org alerting configuration (one row; defaults applied when absent). */
+export interface AlertRule {
+  minOpportunity: number;
+  channels: string[];
+  digestEnabled: boolean;
+}
+
+/** Aggregated usage over a window, for the Usage tab + quota math. */
+export interface UsageSummary {
+  since: string;
+  tokensIn: number;
+  tokensOut: number;
+  units: number;
+  events: number;
+  byKind: Record<string, number>;
+}

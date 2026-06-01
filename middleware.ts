@@ -37,9 +37,13 @@ export async function middleware(req: NextRequest) {
 
   const path = req.nextUrl.pathname;
   const isAuthPage = path === "/login";
+  // App pages that require a session. /invite is intentionally NOT here — it
+  // handles its own "sign in then accept" flow so invitees can land on it first.
+  const isProtectedPage =
+    path === "/" || path === "/settings" || path.startsWith("/settings/");
 
   // Unauthenticated → bounce page navigations to /login (APIs self-handle 401).
-  if (!user && !isAuthPage && path === "/") {
+  if (!user && !isAuthPage && isProtectedPage) {
     const dest = req.nextUrl.clone();
     dest.pathname = "/login";
     return NextResponse.redirect(dest);

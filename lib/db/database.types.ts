@@ -193,6 +193,19 @@ export interface Database {
         },
         { read_at?: Timestamp | null }
       >;
+      invitations: Table<
+        {
+          id: string; org_id: string; email: string; role: MemberRoleEnum;
+          token: string; invited_by: string | null; expires_at: Timestamp;
+          accepted_at: Timestamp | null; created_at: Timestamp;
+        },
+        {
+          id?: string; org_id: string; email: string; role?: MemberRoleEnum;
+          token: string; invited_by?: string | null; expires_at?: Timestamp;
+          accepted_at?: Timestamp | null; created_at?: Timestamp;
+        },
+        { role?: MemberRoleEnum; accepted_at?: Timestamp | null }
+      >;
     };
     Functions: {
       is_org_member: { Args: { target_org: string }; Returns: boolean };
@@ -202,6 +215,7 @@ export interface Database {
         Returns: Database["public"]["Tables"]["orgs"]["Row"];
       };
       set_signals_not_current: { Args: { target_company: string }; Returns: undefined };
+      accept_invitation: { Args: { invite_token: string }; Returns: string };
     };
     Views: { [_ in never]: never };
     Enums: {

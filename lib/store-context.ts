@@ -4,6 +4,7 @@ import * as json from "./store";
 import { storeFor, type Store } from "./store.supabase";
 import { getServerClient } from "./db/server";
 import { logger } from "./logger";
+import type { MemberRole } from "./types";
 
 // ── Store resolution ──────────────────────────────────────────────────────────
 // One entry point the routes call instead of importing store functions directly.
@@ -50,6 +51,29 @@ const jsonStore: Store = {
   createNotifications: async () => {},
   listNotifications: async () => [],
   markNotificationsRead: async () => {},
+  // Team & settings don't apply to the single-tenant demo — inert stubs so the
+  // interface is satisfied. The /settings UI is only reachable when Supabase is on.
+  getMemberRole: async () => "owner",
+  listMembers: async () => [],
+  updateMemberRole: async () => {},
+  removeMember: async () => {},
+  listInvitations: async () => [],
+  createInvitation: async () => {
+    throw new Error("Invitations require a configured workspace.");
+  },
+  revokeInvitation: async () => {},
+  getOrgSettings: async () => ({ id: "demo", name: "Demo Workspace", slug: null }),
+  updateOrgName: async () => {},
+  getAlertRule: async () => ({ minOpportunity: 70, channels: ["in_app"], digestEnabled: true }),
+  updateAlertRule: async () => {},
+  getUsageSummary: async (sinceIso: string) => ({
+    since: sinceIso,
+    tokensIn: 0,
+    tokensOut: 0,
+    units: 0,
+    events: 0,
+    byKind: {},
+  }),
 };
 
 /** Resolve the user's active org. For now: their first membership. An explicit
@@ -129,4 +153,57 @@ export async function storeOr401(): Promise<
     }
     throw err;
   }
+}
+
+export interface ActiveContext {
+  store: Store;
+  orgId: string;
+  userId: string;
+  email: string;
+  role: MemberRole;
+}
+
+/** Resolve the signed-in user's store + active org + role in one shot. Supabase
+ *  only — settings/team features are gated to configured workspaces. Throws
+ *  UnauthorizedError when there's no session (routes map that to 401). */
+export async function getActiveContext(): Promise<ActiveContext> {
+  if (!supabaseConfigured()) throw new UnauthorizedError();
+  const db = await getServerClient();
+  const {
+    data: { user },
+  } = await db.auth.getUser();
+  if (!user) throw new UnauthorizedError();
+
+  const orgId = (await resolveActiveOrgId(db, user.id)) ?? (await ensureActiveOrg());
+  const store = storeFor({ db, orgId, userId: user.id });
+  const role = (await store.getMemberRole(user.id)) ?? "member";
+  return { store, orgId, userId: user.id, email: user.email ?? "", role };
+}
+
+/** Like getActiveContext but returns a 401/403 response instead of throwing.
+ *  Pass required roles to enforce admin-gated mutations. */
+export async function contextOrError(
+  roles?: MemberRole[],
+): Promise<
+  | { ctx: ActiveContext; res?: undefined }
+  | { ctx?: undefined; res: NextResponse }
+> {
+  let ctx: ActiveContext;
+  try {
+    ctx = await getActiveContext();
+  } catch (err) {
+    if (err instanceof UnauthorizedError) {
+      return { res: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+    }
+    throw err;
+  }
+  if (roles && !roles.includes(ctx.role)) {
+    return {
+      res: NextResponse.json(
+        { error: `Requires role: ${roles.join(" or ")}` },
+        { status: 403 },
+      ),
+    };
+  }
+  return { ctx };
 }

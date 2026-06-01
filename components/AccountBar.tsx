@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getBrowserClient } from "@/lib/db/browser";
 import NotificationsBell from "./NotificationsBell";
@@ -30,6 +31,12 @@ export default function AccountBar({
       <span className="text-neutral-700">·</span>
       <span>{email}</span>
       <NotificationsBell orgId={orgId} />
+      <Link
+        href="/settings"
+        className="rounded border border-neutral-800 px-2 py-1 text-neutral-300 transition hover:border-neutral-600 hover:text-neutral-100"
+      >
+        Settings
+      </Link>
       <button
         onClick={signOut}
         className="rounded border border-neutral-800 px-2 py-1 text-neutral-300 transition hover:border-neutral-600 hover:text-neutral-100"

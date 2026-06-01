@@ -6,6 +6,15 @@ import { getBrowserClient } from "@/lib/db/browser";
 
 type Mode = "signin" | "signup";
 
+/** Where to land after auth. Honors a ?next= param but only same-origin
+ *  relative paths (no "//" protocol-relative escapes), defaulting to "/". */
+function postLoginDest(): string {
+  if (typeof window === "undefined") return "/";
+  const next = new URLSearchParams(window.location.search).get("next");
+  if (next && next.startsWith("/") && !next.startsWith("//")) return next;
+  return "/";
+}
+
 export default function LoginForm() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("signin");
@@ -37,7 +46,7 @@ export default function LoginForm() {
         if (error) throw error;
       }
       // Session is set in cookies — refresh so the server shell picks it up.
-      router.replace("/");
+      router.replace(postLoginDest());
       router.refresh();
     } catch (err) {
       setError((err as Error).message);

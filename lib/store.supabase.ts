@@ -1,16 +1,22 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./db/database.types";
 import type {
+  AlertRule,
   Battlecard,
   Company,
+  Invitation,
+  Member,
+  MemberRole,
   NewNotification,
   Notification,
+  OrgSettings,
   Scan,
   ScanEvidence,
   SerpEvidence,
   Signal,
   Snapshot,
   UsageEvent,
+  UsageSummary,
 } from "./types";
 import { DuplicateCompanyError, normalizeDomain } from "./store";
 import { logger } from "./logger";
@@ -86,6 +92,30 @@ export interface Store {
     evidence: ScanEvidence[];
     battlecards: Battlecard[];
   }): Promise<void>;
+
+  // ── Team & settings (Phase 8) ──────────────────────────────────────────────
+  /** This user's role in the active org (null if not a member). */
+  getMemberRole(userId: string): Promise<MemberRole | null>;
+  /** Org members joined with their profile email/name. */
+  listMembers(): Promise<Member[]>;
+  updateMemberRole(userId: string, role: MemberRole): Promise<void>;
+  removeMember(userId: string): Promise<void>;
+  /** Pending + accepted invitations for the org, newest first. */
+  listInvitations(): Promise<Invitation[]>;
+  createInvitation(input: {
+    email: string;
+    role: MemberRole;
+    token: string;
+    invitedBy: string | null;
+  }): Promise<Invitation>;
+  revokeInvitation(id: string): Promise<void>;
+  getOrgSettings(): Promise<OrgSettings>;
+  updateOrgName(name: string): Promise<void>;
+  /** Full alert config (threshold + channels + digest), defaults when unset. */
+  getAlertRule(): Promise<AlertRule>;
+  updateAlertRule(patch: Partial<AlertRule>): Promise<void>;
+  /** Aggregate metered usage since the given ISO timestamp. */
+  getUsageSummary(sinceIso: string): Promise<UsageSummary>;
 }
 
 /** Bind the store operations to one org's data through the given client. */
@@ -392,6 +422,163 @@ export function storeFor(ctx: StoreContext): Store {
       fail("markNotificationsRead", error);
     },
 
+    // ── Team & settings ────────────────────────────────────────────────────
+    async getMemberRole(userId) {
+      const { data, error } = await db
+        .from("org_members")
+        .select("role")
+        .eq("org_id", orgId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      fail("getMemberRole", error);
+      return data?.role ?? null;
+    },
+
+    async listMembers() {
+      const { data, error } = await db
+        .from("org_members")
+        .select("*")
+        .eq("org_id", orgId)
+        .order("created_at", { ascending: true });
+      fail("listMembers", error);
+      const members = data ?? [];
+      // Join profile email/name in a second query (no FK embed in hand-authored types).
+      const ids = members.map((m) => m.user_id);
+      const profiles = new Map<string, { email: string | null; full_name: string | null }>();
+      if (ids.length) {
+        const { data: profs } = await db
+          .from("profiles")
+          .select("id, email, full_name")
+          .in("id", ids);
+        for (const p of profs ?? []) profiles.set(p.id, { email: p.email, full_name: p.full_name });
+      }
+      return members.map((m) => ({
+        userId: m.user_id,
+        email: profiles.get(m.user_id)?.email ?? null,
+        fullName: profiles.get(m.user_id)?.full_name ?? null,
+        role: m.role,
+        createdAt: m.created_at,
+      }));
+    },
+
+    async updateMemberRole(userId, role) {
+      const { error } = await db
+        .from("org_members")
+        .update({ role })
+        .eq("org_id", orgId)
+        .eq("user_id", userId);
+      fail("updateMemberRole", error);
+    },
+
+    async removeMember(userId) {
+      const { error } = await db
+        .from("org_members")
+        .delete()
+        .eq("org_id", orgId)
+        .eq("user_id", userId);
+      fail("removeMember", error);
+    },
+
+    async listInvitations() {
+      const { data, error } = await db
+        .from("invitations")
+        .select("*")
+        .eq("org_id", orgId)
+        .order("created_at", { ascending: false });
+      fail("listInvitations", error);
+      return (data ?? []).map(rowToInvitation);
+    },
+
+    async createInvitation(input) {
+      const insert: Tables["invitations"]["Insert"] = {
+        org_id: orgId,
+        email: input.email.trim().toLowerCase(),
+        role: input.role,
+        token: input.token,
+        invited_by: input.invitedBy,
+      };
+      const { data, error } = await db
+        .from("invitations")
+        .insert(insert)
+        .select("*")
+        .single();
+      fail("createInvitation", error);
+      return rowToInvitation(data!);
+    },
+
+    async revokeInvitation(id) {
+      const { error } = await db
+        .from("invitations")
+        .delete()
+        .eq("org_id", orgId)
+        .eq("id", id);
+      fail("revokeInvitation", error);
+    },
+
+    async getOrgSettings() {
+      const { data, error } = await db
+        .from("orgs")
+        .select("id, name, slug")
+        .eq("id", orgId)
+        .maybeSingle();
+      fail("getOrgSettings", error);
+      return { id: orgId, name: data?.name ?? "Workspace", slug: data?.slug ?? null };
+    },
+
+    async updateOrgName(name) {
+      const { error } = await db
+        .from("orgs")
+        .update({ name: name.trim() })
+        .eq("id", orgId);
+      fail("updateOrgName", error);
+    },
+
+    async getAlertRule() {
+      const { data } = await db
+        .from("alert_rules")
+        .select("min_opportunity, channels, digest_enabled")
+        .eq("org_id", orgId)
+        .maybeSingle();
+      return {
+        minOpportunity: data?.min_opportunity ?? 70,
+        channels: data?.channels ?? ["in_app"],
+        digestEnabled: data?.digest_enabled ?? true,
+      };
+    },
+
+    async updateAlertRule(patch) {
+      const row: Tables["alert_rules"]["Insert"] = { org_id: orgId };
+      if (patch.minOpportunity !== undefined) row.min_opportunity = patch.minOpportunity;
+      if (patch.channels !== undefined) row.channels = patch.channels;
+      if (patch.digestEnabled !== undefined) row.digest_enabled = patch.digestEnabled;
+      // Upsert: the row may not exist yet (defaults applied in code until then).
+      const { error } = await db
+        .from("alert_rules")
+        .upsert(row, { onConflict: "org_id" });
+      fail("updateAlertRule", error);
+    },
+
+    async getUsageSummary(sinceIso) {
+      const { data, error } = await db
+        .from("usage_events")
+        .select("kind, tokens_in, tokens_out, units")
+        .eq("org_id", orgId)
+        .gte("created_at", sinceIso);
+      fail("getUsageSummary", error);
+      const rows = data ?? [];
+      const byKind: Record<string, number> = {};
+      let tokensIn = 0;
+      let tokensOut = 0;
+      let units = 0;
+      for (const r of rows) {
+        tokensIn += r.tokens_in ?? 0;
+        tokensOut += r.tokens_out ?? 0;
+        units += r.units ?? 0;
+        byKind[r.kind] = (byKind[r.kind] ?? 0) + 1;
+      }
+      return { since: sinceIso, tokensIn, tokensOut, units, events: rows.length, byKind };
+    },
+
     // ── Demo seed ─────────────────────────────────────────────────────────────
     async loadSeedBundle(bundle) {
       // Replace the calling org's state only. Delete companies first; cascades
@@ -592,6 +779,19 @@ export function rowToBattlecard(r: Tables["battlecards"]["Row"]): Battlecard {
     companyId: r.company_id,
     companyName: r.company_name,
     markdown: r.markdown,
+    createdAt: r.created_at,
+  };
+}
+
+export function rowToInvitation(r: Tables["invitations"]["Row"]): Invitation {
+  return {
+    id: r.id,
+    email: r.email,
+    role: r.role,
+    token: r.token,
+    invitedBy: r.invited_by,
+    expiresAt: r.expires_at,
+    acceptedAt: r.accepted_at,
     createdAt: r.created_at,
   };
 }

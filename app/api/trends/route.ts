@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { storeOr401 } from "@/lib/store-context";
-import { computeMomentum } from "@/lib/trends";
+import { computeMomentum, computeSeries } from "@/lib/trends";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +21,11 @@ export async function GET(req: Request) {
   const trends = await Promise.all(
     targets.map(async (c) => {
       const history = await store.listSignalHistory(c.id);
-      return { company: { id: c.id, name: c.name }, momentum: computeMomentum(c.id, history) };
+      return {
+        company: { id: c.id, name: c.name },
+        momentum: computeMomentum(c.id, history),
+        series: computeSeries(c.id, history),
+      };
     }),
   );
 

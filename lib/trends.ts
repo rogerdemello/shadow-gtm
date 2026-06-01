@@ -25,6 +25,22 @@ export interface Momentum {
   lastSeen: string | null;
 }
 
+/** One point per scan, for plotting a company's trajectory over time. */
+export interface SeriesPoint {
+  /** Stable key for the scan this point summarizes. */
+  scanId: string;
+  /** ISO timestamp representing the scan (its most recent signal). */
+  date: string;
+  /** Signals captured in this scan. */
+  count: number;
+  /** Mean opportunity score across this scan's signals. */
+  avgOpportunity: number;
+  /** Highest opportunity score in this scan. */
+  topOpportunity: number;
+  /** Signal counts by type within this scan. */
+  byType: Partial<Record<SignalType, number>>;
+}
+
 /** Group a company's full signal history into scans, newest scan first. */
 function groupByScan(signals: Signal[]): Signal[][] {
   const byScan = new Map<string, Signal[]>();
@@ -84,4 +100,32 @@ export function computeMomentum(companyId: string, history: Signal[]): Momentum 
     firstSeen: timestamps[0] ?? null,
     lastSeen: timestamps[timestamps.length - 1] ?? null,
   };
+}
+
+/**
+ * Per-scan time series for one company, in chronological order (oldest first)
+ * so charts read left-to-right. Pure; safe to unit-test without a DB.
+ */
+export function computeSeries(companyId: string, history: Signal[]): SeriesPoint[] {
+  const mine = history.filter((s) => s.companyId === companyId);
+  // groupByScan returns newest-first; reverse for chronological plotting.
+  const scans = [...groupByScan(mine)].reverse();
+
+  return scans.map((group) => {
+    const byType: Partial<Record<SignalType, number>> = {};
+    for (const s of group) byType[s.type] = (byType[s.type] ?? 0) + 1;
+    const count = group.length;
+    const avgOpportunity =
+      count === 0
+        ? 0
+        : Math.round(group.reduce((sum, s) => sum + s.opportunityScore, 0) / count);
+    return {
+      scanId: group[0]?.scanId || group[0]?.createdAt || "",
+      date: latestTs(group),
+      count,
+      avgOpportunity,
+      topOpportunity: maxScore(group),
+      byType,
+    };
+  });
 }

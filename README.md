@@ -1,12 +1,10 @@
+
 # ◢ Shadow GTM
 
 **Autonomous web intelligence for revenue teams.** Shadow GTM watches the live
 web through [Bright Data](https://brightdata.com), reasons over what it finds
 with Google's Gemini, and turns competitor movement into **ranked, explained GTM plays** —
 not another summarizer, an analyst.
-
-> Built for the **Web Data UNLOCKED Hackathon** (Bright Data × lablab.ai) —
-> Track 1: GTM Intelligence.
 
 The one loop the whole product runs on:
 
@@ -156,14 +154,6 @@ filesystem is read-only there), which persists within a warm instance: fine for 
 live demo session. For durable persistence across serverless invocations, swap the
 JSON store in `lib/store.ts` for a hosted DB (Neon/Turso/Vercel Postgres) — every
 read/write already goes through that one module.
-
-## Submission materials
-
-- [`docs/deck.html`](docs/deck.html) — **presentable pitch deck** (open in a browser, arrow-key nav; present live or screen-record).
-- [`docs/SLIDES.md`](docs/SLIDES.md) — the deck outline, mapped to judging criteria.
-- [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) — 90-second demo script with timing.
-- [`docs/SUBMISSION.md`](docs/SUBMISSION.md) — ready-to-paste title / descriptions / tags.
-- [`docs/cover.svg`](docs/cover.svg) — **cover image** (open in a browser → screenshot to export PNG/JPG for the lablab cover upload).
 
 ---
 

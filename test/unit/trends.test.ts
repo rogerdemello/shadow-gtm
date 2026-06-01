@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeMomentum } from "../../lib/trends";
+import { computeMomentum, computeSeries } from "../../lib/trends";
 import type { Signal, SignalType } from "../../lib/types";
 
 let seq = 0;
@@ -82,5 +82,51 @@ describe("computeMomentum", () => {
     ]);
     expect(m.totalSignals).toBe(1);
     expect(m.topOpportunity).toBe(50);
+  });
+});
+
+describe("computeSeries", () => {
+  it("returns an empty series for no history", () => {
+    expect(computeSeries("c1", [])).toEqual([]);
+  });
+
+  it("emits one point per scan in chronological order (oldest first)", () => {
+    const series = computeSeries("c1", [
+      sig({ scanId: "scan3", createdAt: "2026-05-15T00:00:00Z", opp: 85 }),
+      sig({ scanId: "scan1", createdAt: "2026-05-01T00:00:00Z", opp: 60 }),
+      sig({ scanId: "scan2", createdAt: "2026-05-08T00:00:00Z", opp: 70 }),
+    ]);
+    expect(series.map((p) => p.scanId)).toEqual(["scan1", "scan2", "scan3"]);
+    expect(series.map((p) => p.date)).toEqual([
+      "2026-05-01T00:00:00Z",
+      "2026-05-08T00:00:00Z",
+      "2026-05-15T00:00:00Z",
+    ]);
+  });
+
+  it("aggregates count, avg, top, and byType per scan", () => {
+    const series = computeSeries("c1", [
+      sig({ scanId: "scan1", createdAt: "2026-05-01T00:00:00Z", type: "pricing", opp: 40 }),
+      sig({ scanId: "scan2", createdAt: "2026-05-08T00:00:00Z", type: "pricing", opp: 60 }),
+      sig({ scanId: "scan2", createdAt: "2026-05-08T00:00:00Z", type: "hiring", opp: 80 }),
+    ]);
+    expect(series).toHaveLength(2);
+    const [first, second] = series;
+    expect(first.count).toBe(1);
+    expect(first.avgOpportunity).toBe(40);
+    expect(first.topOpportunity).toBe(40);
+    expect(second.count).toBe(2);
+    expect(second.avgOpportunity).toBe(70); // (60+80)/2
+    expect(second.topOpportunity).toBe(80);
+    expect(second.byType).toEqual({ pricing: 1, hiring: 1 });
+  });
+
+  it("ignores other companies' signals", () => {
+    const series = computeSeries("c1", [
+      sig({ scanId: "scan1", createdAt: "2026-05-01T00:00:00Z", opp: 50 }),
+      { ...sig({ scanId: "scanX", createdAt: "2026-05-09T00:00:00Z", opp: 99 }), companyId: "other" },
+    ]);
+    expect(series).toHaveLength(1);
+    expect(series[0].topOpportunity).toBe(50);
   });
 });

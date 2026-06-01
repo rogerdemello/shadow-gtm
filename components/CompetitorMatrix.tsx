@@ -2,6 +2,7 @@
 
 import type { Company, Signal, SignalType } from "@/lib/types";
 import { SIGNAL_META } from "@/lib/ui";
+import Sparkline from "./charts/Sparkline";
 
 const CELL_TYPES: SignalType[] = [
   "pricing",
@@ -43,12 +44,15 @@ export default function CompetitorMatrix({
   companies,
   signals,
   scanningId,
+  sparklines,
   onBattlecard,
   onRemove,
 }: {
   companies: Company[];
   signals: Signal[];
   scanningId: string | null;
+  /** Per-company opportunity-over-time values for the momentum sparkline. */
+  sparklines?: Record<string, number[]>;
   onBattlecard: (company: Company) => void;
   onRemove: (companyId: string) => void;
 }) {
@@ -119,12 +123,17 @@ export default function CompetitorMatrix({
                     </td>
                   ))}
                   <td className="px-2 py-2.5">
-                    <span
-                      className="font-mono text-[11px] uppercase tracking-wide"
-                      style={{ color: mo.color }}
-                    >
-                      {mo.label}
-                    </span>
+                    <div className="flex flex-col gap-0.5">
+                      <span
+                        className="font-mono text-[11px] uppercase tracking-wide"
+                        style={{ color: mo.color }}
+                      >
+                        {mo.label}
+                      </span>
+                      {sparklines?.[c.id] && sparklines[c.id].length > 1 && (
+                        <Sparkline values={sparklines[c.id]} color={mo.color} />
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center justify-end gap-1.5">

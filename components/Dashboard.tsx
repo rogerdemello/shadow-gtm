@@ -6,6 +6,7 @@ import AddCompany from "./AddCompany";
 import CompetitorMatrix from "./CompetitorMatrix";
 import IntelligenceFeed from "./IntelligenceFeed";
 import Recommendations from "./Recommendations";
+import TrendsPanel, { type TrendEntry } from "./TrendsPanel";
 import BattlecardModal from "./BattlecardModal";
 import WarRoomModal from "./WarRoomModal";
 import EvidenceModal from "./EvidenceModal";
@@ -37,6 +38,7 @@ export default function Dashboard() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [config, setConfig] = useState<Config | null>(null);
+  const [trends, setTrends] = useState<TrendEntry[]>([]);
 
   const [busy, setBusy] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -67,12 +69,29 @@ export default function Dashboard() {
     setHydrated(true);
   }, []);
 
+  // Trends are supplementary (their own endpoint + history query) — load them
+  // separately so a trends hiccup never blocks the core dashboard from rendering.
+  const loadTrends = useCallback(async () => {
+    try {
+      const res = await fetch("/api/trends");
+      if (!res.ok) {
+        setTrends([]);
+        return;
+      }
+      const data = await safeJson(res);
+      setTrends((data.trends as TrendEntry[] | undefined) ?? []);
+    } catch {
+      setTrends([]);
+    }
+  }, []);
+
   useEffect(() => {
     loadState().catch((e) => {
       setError(String(e));
       setHydrated(true);
     });
-  }, [loadState]);
+    loadTrends();
+  }, [loadState, loadTrends]);
 
   const addCompany = useCallback(
     async (name: string, domain: string, pricingUrl?: string, renderJs?: boolean) => {
@@ -108,8 +127,9 @@ export default function Dashboard() {
       await fetch(`/api/companies/${companyId}`, { method: "DELETE" });
       // Re-sync — the server cascaded deletes to evidence/snapshots/battlecards.
       await loadState();
+      loadTrends();
     },
-    [loadState],
+    [loadState, loadTrends],
   );
 
   const loadDemo = useCallback(async () => {
@@ -128,12 +148,13 @@ export default function Dashboard() {
       const res = await fetch("/api/seed", { method: "POST" });
       if (!res.ok) throw new Error("Seed failed");
       await loadState();
+      loadTrends();
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
-  }, [loadState]);
+  }, [loadState, loadTrends]);
 
   const scanEsRef = useRef<EventSource | null>(null);
   const runScan = useCallback(() => {
@@ -149,6 +170,8 @@ export default function Dashboard() {
       setScanning(false);
       setScanningId(null);
       setScanningName(null);
+      // History grew this scan — refresh momentum/trends.
+      loadTrends();
     };
 
     es.onmessage = (e) => {
@@ -190,7 +213,7 @@ export default function Dashboard() {
 
     // Network drop / server close mid-stream — stop and reset (no auto-reconnect).
     es.onerror = () => finish();
-  }, []);
+  }, [loadTrends]);
 
   // If the user navigates away mid-scan, close the SSE so we don't leak it.
   useEffect(() => {
@@ -388,6 +411,12 @@ export default function Dashboard() {
   );
   const empty = companies.length === 0;
 
+  // Per-company opportunity-over-time, for the matrix momentum sparklines.
+  const sparklines: Record<string, number[]> = {};
+  for (const t of trends) {
+    sparklines[t.company.id] = t.series.map((p) => p.topOpportunity);
+  }
+
   if (!hydrated) {
     return (
       <div className="mx-auto flex max-w-7xl items-center justify-center px-4 py-24 font-mono text-xs uppercase tracking-widest text-slate-500">
@@ -502,9 +531,11 @@ export default function Dashboard() {
             companies={companies}
             signals={signals}
             scanningId={scanningId}
+            sparklines={sparklines}
             onBattlecard={openBattlecard}
             onRemove={removeCompany}
           />
+          {!empty && <TrendsPanel trends={trends} />}
           <div className="h-[560px]">
             <IntelligenceFeed
               signals={signals}
@@ -567,7 +598,7 @@ export default function Dashboard() {
             Gemini
           </a>
         </span>
-        <span>Shadow GTM · for the Web Data UNLOCKED hackathon</span>
+        <span>Shadow GTM · autonomous GTM intelligence</span>
       </footer>
     </div>
   );

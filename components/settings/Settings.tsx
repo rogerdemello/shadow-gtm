@@ -15,7 +15,15 @@ import type {
 } from "@/lib/types";
 import CopyButton from "../CopyButton";
 
-const TABS = ["Organization", "Team", "Billing", "Integrations", "Alerts", "Usage"] as const;
+const TABS = [
+  "Organization",
+  "Team",
+  "Billing",
+  "Integrations",
+  "Alerts",
+  "Usage",
+  "Audit",
+] as const;
 type Tab = (typeof TABS)[number];
 
 const isAdmin = (role: MemberRole) => role === "owner" || role === "admin";
@@ -63,6 +71,7 @@ export default function Settings({
       {tab === "Integrations" && <IntegrationsTab role={role} />}
       {tab === "Alerts" && <AlertsTab />}
       {tab === "Usage" && <UsageTab role={role} />}
+      {tab === "Audit" && <AuditTab />}
     </div>
   );
 }
@@ -148,6 +157,145 @@ function OrgTab({
       </div>
       {!canEdit && (
         <p className="mt-2 text-xs text-slate-600">Only owners/admins can rename the workspace.</p>
+      )}
+
+      {/* Data export + danger zone */}
+      <div className="mt-6 border-t border-ink-500/40 pt-4">
+        <h3 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-slate-500">
+          Your data
+        </h3>
+        {canEdit && (
+          <a
+            href="/api/export"
+            className="inline-block rounded-lg border border-ink-500 px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-slate-300 transition hover:border-accent/50 hover:text-accent"
+          >
+            ⬇ Export workspace data (JSON)
+          </a>
+        )}
+        {role === "owner" && <DeleteOrg name={initialOrg.name} />}
+      </div>
+    </Panel>
+  );
+}
+
+function DeleteOrg({ name }: { name: string }) {
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function del() {
+    setBusy(true);
+    setErr(null);
+    try {
+      await jsonOrThrow(await fetch("/api/org/delete", { method: "POST" }));
+      window.location.href = "/";
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-lg border border-signal-high/30 bg-signal-high/5 p-3">
+      <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-signal-high">
+        Danger zone
+      </p>
+      <p className="mb-2 text-xs text-slate-400">
+        Permanently delete this workspace and all its data. Type the workspace name to confirm.
+      </p>
+      {err && <Notice kind="error">{err}</Notice>}
+      <div className="flex flex-wrap gap-2">
+        <input
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          placeholder={name}
+          className="min-w-[180px] flex-1 rounded border border-ink-500 bg-ink-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-signal-high/60"
+        />
+        <button
+          onClick={del}
+          disabled={busy || confirm !== name}
+          className="rounded-lg border border-signal-high/50 px-3 py-2 text-sm font-bold text-signal-high transition hover:bg-signal-high/10 disabled:opacity-40"
+        >
+          {busy ? "Deleting…" : "Delete workspace"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Audit ─────────────────────────────────────────────────────────────────
+
+interface AuditSnapshot {
+  pageType: string;
+  url: string;
+  hash: string;
+  fetchedAt: string;
+}
+
+function AuditTab() {
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
+  const [selected, setSelected] = useState<string>("");
+  const [snapshots, setSnapshots] = useState<AuditSnapshot[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/companies")
+      .then(jsonOrThrow)
+      .then((d) => {
+        const cs = (d.companies as { id: string; name: string }[]) ?? [];
+        setCompanies(cs);
+        if (cs[0]) setSelected(cs[0].id);
+      })
+      .catch((e) => setErr((e as Error).message));
+  }, []);
+
+  useEffect(() => {
+    if (!selected) return;
+    fetch(`/api/audit?companyId=${encodeURIComponent(selected)}`)
+      .then(jsonOrThrow)
+      .then((d) => setSnapshots((d.snapshots as AuditSnapshot[]) ?? []))
+      .catch((e) => setErr((e as Error).message));
+  }, [selected]);
+
+  return (
+    <Panel>
+      {err && <Notice kind="error">{err}</Notice>}
+      <p className="mb-3 text-xs text-slate-500">
+        Immutable trail: every page we fetched, with its content fingerprint (SHA-256) and
+        timestamp — so every signal can be traced to a verifiable source.
+      </p>
+      {companies.length === 0 ? (
+        <p className="text-sm text-slate-600">No competitors yet.</p>
+      ) : (
+        <>
+          <select
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+            className="mb-3 rounded border border-ink-500 bg-ink-900 px-2 py-1 font-mono text-[11px] text-slate-300 outline-none focus:border-accent/60"
+          >
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          {snapshots.length === 0 ? (
+            <p className="text-sm text-slate-600">No captures recorded yet.</p>
+          ) : (
+            <ul className="space-y-1.5 font-mono text-[11px]">
+              {snapshots.map((s, i) => (
+                <li key={i} className="rounded border border-ink-500/40 bg-ink-900/40 px-2 py-1.5">
+                  <div className="flex justify-between text-slate-400">
+                    <span className="uppercase">{s.pageType}</span>
+                    <span>{new Date(s.fetchedAt).toLocaleString()}</span>
+                  </div>
+                  <div className="truncate text-slate-500">{s.url}</div>
+                  <div className="text-slate-600">sha256:{s.hash}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </Panel>
   );

@@ -101,6 +101,9 @@ const jsonStore: Store = {
   // No background queue in the demo.
   listFailedJobs: async () => [],
   retryJob: async () => {},
+  // Compliance ops require a configured workspace.
+  exportData: async () => ({ note: "Export is available in a configured workspace." }),
+  deleteOrg: async () => {},
 };
 
 /** Resolve the user's active org. For now: their first membership. An explicit

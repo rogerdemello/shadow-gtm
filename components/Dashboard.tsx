@@ -607,7 +607,13 @@ export default function Dashboard() {
             Gemini
           </a>
         </span>
-        <span>Shadow GTM · autonomous GTM intelligence</span>
+        <span className="flex items-center gap-3">
+          <a href="/terms" className="hover:text-accent">Terms</a>
+          <a href="/privacy" className="hover:text-accent">Privacy</a>
+          <a href="/dpa" className="hover:text-accent">DPA</a>
+          <span className="text-slate-700">·</span>
+          <span>Shadow GTM</span>
+        </span>
       </footer>
     </div>
   );

@@ -165,6 +165,12 @@ export interface Store {
   listFailedJobs(): Promise<FailedJob[]>;
   /** Re-queue a failed job for another attempt. */
   retryJob(id: string): Promise<void>;
+
+  // ── Compliance (Phase 14) ──────────────────────────────────────────────────
+  /** Full export of the org's data (GDPR data-portability). */
+  exportData(): Promise<Record<string, unknown>>;
+  /** Delete the active org and (via FK cascade) all its data. Owner-gated by RLS. */
+  deleteOrg(): Promise<void>;
 }
 
 /** Bind the store operations to one org's data through the given client. */
@@ -807,6 +813,43 @@ export function storeFor(ctx: StoreContext): Store {
         .eq("id", id)
         .eq("status", "failed");
       fail("retryJob", error);
+    },
+
+    // ── Compliance ────────────────────────────────────────────────────────
+    async exportData() {
+      const [companies, signals, evidence, settings, alertRule, subscription] =
+        await Promise.all([
+          this.listCompanies(),
+          this.listSignals(),
+          this.listEvidence(),
+          this.getOrgSettings(),
+          this.getAlertRule(),
+          this.getSubscription(),
+        ]);
+      // Per-company history (append-only signal trail + battlecards).
+      const history = await Promise.all(
+        companies.map(async (c) => ({
+          companyId: c.id,
+          signals: await this.listSignalHistory(c.id),
+          snapshots: await this.listSnapshots(c.id),
+          battlecard: (await this.getBattlecard(c.id)) ?? null,
+        })),
+      );
+      return {
+        exportedAt: new Date().toISOString(),
+        org: settings,
+        subscription,
+        alertRule,
+        companies,
+        currentSignals: signals,
+        evidence,
+        history,
+      };
+    },
+
+    async deleteOrg() {
+      const { error } = await db.from("orgs").delete().eq("id", orgId);
+      fail("deleteOrg", error);
     },
 
     // ── Demo seed ─────────────────────────────────────────────────────────────

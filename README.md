@@ -29,6 +29,9 @@ governance story.
 - **Watchlist + live scans** — Gemini reads each competitor's pricing page *and* homepage (URL-context tool) and pulls news/reviews/hiring/intent via Google Search grounding, diffs against the last scan, and extracts scored, reasoned signals — all real, cited, live web data. Results stream into the feed live (SSE).
 - **Auditable evidence** — every signal carries a verbatim source quote; every fetched page is fingerprinted (URL + SHA-256 + timestamp) in an immutable audit trail.
 - **Battlecards & War Room** — stream a Markdown sales battlecard from a competitor's signals, or type an attack directive for a full, signal-grounded campaign plan.
+- **Deep-dive agent** — an autonomous multi-step researcher: it plans the highest-value angles for a competitor, runs a grounded web search per angle, and synthesizes a cited dossier (funding, product, pricing, customers, sentiment) with a strategic assessment.
+- **Ask Shadow (analyst agent)** — a conversational analyst with tool-calling: ask anything about your landscape and it grounds the answer in your own signals/trends/dossiers and the live web, choosing which tools to use.
+- **Signal triage** — mark signals handled or dismiss them; dismissed signals drop out of recommended plays and briefs. The feed is a workspace, not a static list.
 - **Trends & momentum** — append-only signal history powers opportunity-over-time charts, per-competitor momentum, and matrix sparklines (Recharts).
 
 **Platform**

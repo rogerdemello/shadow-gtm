@@ -4,6 +4,7 @@ const NAV = [
   { href: "/docs", label: "Overview" },
   { href: "/docs/api", label: "API reference" },
   { href: "/docs/sso", label: "SSO setup" },
+  { href: "/docs/regions", label: "Data residency" },
 ];
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {

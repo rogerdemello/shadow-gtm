@@ -1,5 +1,6 @@
 import Link from "next/link";
 import MarketingShell from "./MarketingShell";
+import { getTranslator } from "@/lib/i18n";
 
 const FEATURES = [
   {
@@ -29,37 +30,33 @@ const FEATURES = [
 ];
 
 export default function Landing() {
+  const t = getTranslator();
   return (
     <MarketingShell>
       {/* Hero */}
       <section className="py-12 text-center">
         <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.3em] text-accent">
-          Autonomous web intelligence for revenue teams
+          {t("landing.eyebrow")}
         </p>
         <h1 className="mx-auto max-w-3xl text-4xl font-bold leading-tight tracking-tight text-slate-50 sm:text-5xl">
-          Turn the live web into a real-time GTM intelligence layer.
+          {t("landing.headline")}
         </h1>
-        <p className="mx-auto mt-4 max-w-2xl text-base text-slate-400">
-          Shadow GTM watches your competitors, reasons over what changes, and hands your team the
-          exact play to run — with a quote from the source to back every claim.
-        </p>
+        <p className="mx-auto mt-4 max-w-2xl text-base text-slate-400">{t("landing.sub")}</p>
         <div className="mt-7 flex items-center justify-center gap-3">
           <Link
             href="/login"
             className="rounded-lg bg-accent px-6 py-3 text-sm font-bold text-ink-900 shadow-glow transition hover:brightness-110"
           >
-            Start free
+            {t("landing.cta.primary")}
           </Link>
           <Link
             href="/features"
             className="rounded-lg border border-ink-500 px-6 py-3 text-sm font-bold text-slate-200 transition hover:border-accent/50 hover:text-accent"
           >
-            See features
+            {t("landing.cta.secondary")}
           </Link>
         </div>
-        <p className="mt-3 font-mono text-[11px] text-slate-600">
-          Free plan · no credit card · explore with one-click demo data
-        </p>
+        <p className="mt-3 font-mono text-[11px] text-slate-600">{t("landing.cta.note")}</p>
       </section>
 
       {/* The loop */}

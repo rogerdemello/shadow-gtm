@@ -6,6 +6,7 @@ import {
   supabaseConfigured,
 } from "@/lib/env";
 import { getServiceClient } from "@/lib/db/service";
+import { activeRegion } from "@/lib/region";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export async function GET() {
     gemini: geminiConfigured(),
     brightData: brightDataConfigured(),
     supabase: supabaseConfigured(),
+    region: activeRegion(),
   };
   let ok = true;
 

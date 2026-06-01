@@ -66,6 +66,8 @@ const EnvSchema = z.object({
 
   /** Public base URL for links in emails (e.g. https://app.example.com). */
   APP_URL: z.url().optional(),
+  /** Deployment region id for data-residency reporting (e.g. "us", "eu"). */
+  APP_REGION: z.string().min(1).optional(),
 
   // ── Billing (Stripe) ─────────────────────────────────────────────────────
   /** Stripe secret key. When absent, billing is disabled (everyone is free). */

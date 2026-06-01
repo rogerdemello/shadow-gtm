@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { DuplicateCompanyError } from "@/lib/store";
 import { storeOr401 } from "@/lib/store-context";
+import { planFor } from "@/lib/plans";
+import { companyLimitReached } from "@/lib/quota";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +37,21 @@ export async function POST(req: Request) {
 
   const r = await storeOr401();
   if (r.res) return r.res;
+
+  // Enforce the plan's company cap.
+  const [existing, sub] = await Promise.all([
+    r.store.listCompanies(),
+    r.store.getSubscription(),
+  ]);
+  const plan = planFor(sub.plan);
+  if (companyLimitReached(plan, existing.length)) {
+    return NextResponse.json(
+      {
+        error: `Your ${plan.name} plan allows up to ${plan.limits.maxCompanies} competitors. Upgrade in Settings → Billing.`,
+      },
+      { status: 402 },
+    );
+  }
 
   try {
     const company = await r.store.addCompany({

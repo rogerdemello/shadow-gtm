@@ -74,6 +74,14 @@ const jsonStore: Store = {
     events: 0,
     byKind: {},
   }),
+  // The keyless demo has no billing — always the free plan, writes are no-ops.
+  getSubscription: async () => ({
+    plan: "free" as const,
+    status: "none",
+    currentPeriodEnd: null,
+    stripeCustomerId: null,
+  }),
+  upsertSubscription: async () => {},
 };
 
 /** Resolve the user's active org. For now: their first membership. An explicit

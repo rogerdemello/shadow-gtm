@@ -15,6 +15,8 @@ import { emailConfigured, sendEmail } from "./email";
 import { signalAlertEmail } from "./email/templates";
 import { appUrl } from "./env";
 import { logger } from "./logger";
+import { planFor } from "./plans";
+import { SCAN_USAGE_KIND, scanQuotaStatus, startOfMonthIso } from "./quota";
 
 // ── The core loop ───────────────────────────────────────────────────────────
 //   live web (Bright Data) → diff vs last scan → AI signals + reasoning → store
@@ -130,6 +132,19 @@ export async function scanCompany(
       if (existing.length > 0) {
         return { ...base, signals: existing, changeSummary: null };
       }
+    }
+
+    // 1c. Enforce the org's monthly scan quota before paying for extraction.
+    //     Runs after the cache-skip return, so reused (unchanged) scans are free.
+    const sub = await store.getSubscription();
+    const plan = planFor(sub.plan);
+    const usedThisMonth =
+      (await store.getUsageSummary(startOfMonthIso(new Date()))).byKind[SCAN_USAGE_KIND] ?? 0;
+    if (scanQuotaStatus(plan, usedThisMonth).over) {
+      return {
+        ...base,
+        error: `Monthly scan limit reached on the ${plan.name} plan (${plan.limits.monthlyScans}). Upgrade in Settings → Billing.`,
+      };
     }
 
     // 2. Build a combined change summary across all monitored pages.

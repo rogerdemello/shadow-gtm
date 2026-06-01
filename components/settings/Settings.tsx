@@ -1,10 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { AlertRule, Invitation, Member, MemberRole, UsageSummary } from "@/lib/types";
+import type {
+  AlertRule,
+  Invitation,
+  Member,
+  MemberRole,
+  Plan,
+  PlanId,
+  Subscription,
+  UsageSummary,
+} from "@/lib/types";
 import CopyButton from "../CopyButton";
 
-const TABS = ["Organization", "Team", "Alerts", "Usage"] as const;
+const TABS = ["Organization", "Team", "Billing", "Alerts", "Usage"] as const;
 type Tab = (typeof TABS)[number];
 
 const isAdmin = (role: MemberRole) => role === "owner" || role === "admin";
@@ -48,6 +57,7 @@ export default function Settings({
 
       {tab === "Organization" && <OrgTab role={role} initialOrg={initialOrg} />}
       {tab === "Team" && <TeamTab role={role} me={me} />}
+      {tab === "Billing" && <BillingTab role={role} />}
       {tab === "Alerts" && <AlertsTab />}
       {tab === "Usage" && <UsageTab />}
     </div>
@@ -364,6 +374,144 @@ function InviteForm({
         </div>
       )}
     </Panel>
+  );
+}
+
+// ── Billing ───────────────────────────────────────────────────────────────
+
+interface BillingData {
+  subscription: Subscription;
+  plan: Plan;
+  quota: { used: number; limit: number | null; remaining: number | null; over: boolean };
+  companies: number;
+  plans: Record<PlanId, Plan>;
+  checkoutPlans: PlanId[];
+  billingEnabled: boolean;
+}
+
+function BillingTab({ role }: { role: MemberRole }) {
+  const [data, setData] = useState<BillingData | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const admin = isAdmin(role);
+
+  useEffect(() => {
+    fetch("/api/billing")
+      .then(jsonOrThrow)
+      .then((d) => setData(d as unknown as BillingData))
+      .catch((e) => setErr((e as Error).message));
+  }, []);
+
+  async function go(url: string, body?: unknown, key?: string) {
+    setBusy(key ?? url);
+    setErr(null);
+    try {
+      const d = await jsonOrThrow(
+        await fetch(url, {
+          method: "POST",
+          headers: body ? { "Content-Type": "application/json" } : undefined,
+          body: body ? JSON.stringify(body) : undefined,
+        }),
+      );
+      window.location.href = d.url as string;
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(null);
+    }
+  }
+
+  if (!data) return <Panel>{err ? <Notice kind="error">{err}</Notice> : "Loading…"}</Panel>;
+
+  const { plan, quota, subscription } = data;
+  const pct =
+    quota.limit === null ? 0 : Math.min(100, Math.round((quota.used / quota.limit) * 100));
+
+  return (
+    <div className="space-y-4">
+      {err && <Notice kind="error">{err}</Notice>}
+      {!data.billingEnabled && (
+        <Notice kind="ok">
+          Billing isn&apos;t configured on this deployment — every workspace runs on the Free
+          plan. Quotas still apply.
+        </Notice>
+      )}
+
+      <Panel>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-slate-500">
+              Current plan
+            </div>
+            <div className="text-lg font-bold text-slate-100">
+              {plan.name}{" "}
+              <span className="font-mono text-xs text-slate-500">({subscription.status})</span>
+            </div>
+          </div>
+          {admin && data.billingEnabled && subscription.stripeCustomerId && (
+            <button
+              onClick={() => go("/api/billing/portal", undefined, "portal")}
+              disabled={busy === "portal"}
+              className="rounded-lg border border-ink-500 px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-slate-300 transition hover:border-accent/50 hover:text-accent disabled:opacity-40"
+            >
+              {busy === "portal" ? "Opening…" : "Manage billing"}
+            </button>
+          )}
+        </div>
+
+        {/* Scan quota bar */}
+        <div className="mt-4">
+          <div className="mb-1 flex justify-between font-mono text-[11px] text-slate-400">
+            <span>Scans this month</span>
+            <span className={quota.over ? "text-signal-high" : ""}>
+              {quota.used} / {quota.limit === null ? "∞" : quota.limit}
+            </span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-ink-900">
+            <div
+              className={`h-full ${quota.over ? "bg-signal-high" : "bg-accent"}`}
+              style={{ width: `${quota.limit === null ? 4 : pct}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="mt-3 font-mono text-[11px] text-slate-500">
+          Competitors: {data.companies}
+          {plan.limits.maxCompanies !== null ? ` / ${plan.limits.maxCompanies}` : " (unlimited)"}
+        </div>
+      </Panel>
+
+      {data.billingEnabled && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {data.checkoutPlans.map((pid) => {
+            const p = data.plans[pid];
+            const current = plan.id === pid;
+            return (
+              <div key={pid} className="rounded-xl border border-ink-500/60 bg-ink-800/60 p-4">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-base font-bold text-slate-100">{p.name}</span>
+                  <span className="font-mono text-sm text-slate-300">${p.priceMonthly}/mo</span>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">{p.blurb}</p>
+                <ul className="mt-2 space-y-0.5 font-mono text-[11px] text-slate-400">
+                  <li>{p.limits.monthlyScans} scans/mo</li>
+                  <li>{p.limits.maxCompanies} competitors</li>
+                  <li>{p.limits.maxMembers} seats</li>
+                </ul>
+                {admin && (
+                  <button
+                    onClick={() => go("/api/billing/checkout", { plan: pid }, pid)}
+                    disabled={current || busy === pid}
+                    className="mt-3 w-full rounded-lg bg-accent px-3 py-2 text-sm font-bold text-ink-900 transition hover:brightness-110 disabled:opacity-40"
+                  >
+                    {current ? "Current plan" : busy === pid ? "Redirecting…" : `Upgrade to ${p.name}`}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 

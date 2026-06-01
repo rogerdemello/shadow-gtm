@@ -62,6 +62,15 @@ const EnvSchema = z.object({
 
   /** Public base URL for links in emails (e.g. https://app.example.com). */
   APP_URL: z.url().optional(),
+
+  // ── Billing (Stripe) ─────────────────────────────────────────────────────
+  /** Stripe secret key. When absent, billing is disabled (everyone is free). */
+  STRIPE_SECRET_KEY: z.string().min(1).optional(),
+  /** Webhook signing secret (whsec_…) used to verify Stripe events. */
+  STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
+  /** Stripe Price IDs for the self-serve tiers. */
+  STRIPE_PRICE_STARTUP: z.string().min(1).optional(),
+  STRIPE_PRICE_GROWTH: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -132,6 +141,12 @@ export function emailConfigured(): boolean {
 /** Best base URL for links in emails. Falls back to APP_URL → localhost. */
 export function appUrl(): string {
   return getEnv().APP_URL || "http://localhost:3000";
+}
+
+/** True once Stripe is configured. When false, every org is treated as free
+ *  and checkout/portal are unavailable (quota still applies via the free plan). */
+export function billingConfigured(): boolean {
+  return Boolean(getEnv().STRIPE_SECRET_KEY);
 }
 
 /** For tests: drop the cached parse so a mutated process.env is re-read. */

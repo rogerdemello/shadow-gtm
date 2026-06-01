@@ -16,6 +16,7 @@ export type PageTypeEnum = "pricing" | "homepage";
 export type MemberRoleEnum = "owner" | "admin" | "member";
 export type JobStatusEnum = "pending" | "running" | "done" | "failed";
 export type ScheduleCadenceEnum = "hourly" | "daily" | "weekly";
+export type PlanTierEnum = "free" | "startup" | "growth" | "enterprise";
 
 type Timestamp = string;
 
@@ -208,6 +209,23 @@ export interface Database {
           accepted_at?: Timestamp | null; created_at?: Timestamp;
         },
         { role?: MemberRoleEnum; accepted_at?: Timestamp | null }
+      >;
+      subscriptions: Table<
+        {
+          org_id: string; plan: PlanTierEnum; status: string;
+          stripe_customer_id: string | null; stripe_subscription_id: string | null;
+          current_period_end: Timestamp | null; updated_at: Timestamp;
+        },
+        {
+          org_id: string; plan?: PlanTierEnum; status?: string;
+          stripe_customer_id?: string | null; stripe_subscription_id?: string | null;
+          current_period_end?: Timestamp | null; updated_at?: Timestamp;
+        },
+        {
+          plan?: PlanTierEnum; status?: string; stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null; current_period_end?: Timestamp | null;
+          updated_at?: Timestamp;
+        }
       >;
     };
     Functions: {

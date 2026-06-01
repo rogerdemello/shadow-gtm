@@ -190,3 +190,28 @@ export interface UsageSummary {
   events: number;
   byKind: Record<string, number>;
 }
+
+// ── Billing & plans (Phase 10) ──────────────────────────────────────────────
+
+export type PlanId = "free" | "startup" | "growth" | "enterprise";
+
+/** Static plan definition. `null` limit = unlimited. priceMonthly -1 = custom. */
+export interface Plan {
+  id: PlanId;
+  name: string;
+  priceMonthly: number;
+  blurb: string;
+  limits: {
+    monthlyScans: number | null;
+    maxCompanies: number | null;
+    maxMembers: number | null;
+  };
+}
+
+/** An org's current subscription. Absent row ⇒ free plan (defaults in code). */
+export interface Subscription {
+  plan: PlanId;
+  status: string; // active | trialing | past_due | canceled | none
+  currentPeriodEnd: string | null;
+  stripeCustomerId: string | null;
+}

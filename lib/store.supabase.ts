@@ -15,6 +15,7 @@ import type {
   SerpEvidence,
   Signal,
   Snapshot,
+  Subscription,
   UsageEvent,
   UsageSummary,
 } from "./types";
@@ -116,6 +117,18 @@ export interface Store {
   updateAlertRule(patch: Partial<AlertRule>): Promise<void>;
   /** Aggregate metered usage since the given ISO timestamp. */
   getUsageSummary(sinceIso: string): Promise<UsageSummary>;
+
+  // ── Billing (Phase 10) ─────────────────────────────────────────────────────
+  /** The org's subscription (defaults to the free plan when no row exists). */
+  getSubscription(): Promise<Subscription>;
+  /** Upsert subscription state — called by the Stripe webhook (service client). */
+  upsertSubscription(sub: {
+    plan: Subscription["plan"];
+    status: string;
+    stripeCustomerId: string | null;
+    stripeSubscriptionId: string | null;
+    currentPeriodEnd: string | null;
+  }): Promise<void>;
 }
 
 /** Bind the store operations to one org's data through the given client. */
@@ -577,6 +590,37 @@ export function storeFor(ctx: StoreContext): Store {
         byKind[r.kind] = (byKind[r.kind] ?? 0) + 1;
       }
       return { since: sinceIso, tokensIn, tokensOut, units, events: rows.length, byKind };
+    },
+
+    // ── Billing ────────────────────────────────────────────────────────────
+    async getSubscription() {
+      const { data } = await db
+        .from("subscriptions")
+        .select("plan, status, stripe_customer_id, current_period_end")
+        .eq("org_id", orgId)
+        .maybeSingle();
+      return {
+        plan: data?.plan ?? "free",
+        status: data?.status ?? "none",
+        currentPeriodEnd: data?.current_period_end ?? null,
+        stripeCustomerId: data?.stripe_customer_id ?? null,
+      };
+    },
+
+    async upsertSubscription(sub) {
+      const row: Tables["subscriptions"]["Insert"] = {
+        org_id: orgId,
+        plan: sub.plan,
+        status: sub.status,
+        stripe_customer_id: sub.stripeCustomerId,
+        stripe_subscription_id: sub.stripeSubscriptionId,
+        current_period_end: sub.currentPeriodEnd,
+        updated_at: new Date().toISOString(),
+      };
+      const { error } = await db
+        .from("subscriptions")
+        .upsert(row, { onConflict: "org_id" });
+      fail("upsertSubscription", error);
     },
 
     // ── Demo seed ─────────────────────────────────────────────────────────────

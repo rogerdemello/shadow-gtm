@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "test:int": "vitest run --config vitest.integration.config.ts",
     "eval": "vitest run --config vitest.eval.config.ts",
+    "smoke": "node scripts/smoke-gemini.mjs",
     "db:migrate": "node scripts/apply-migrations.mjs"
   },
   "dependencies": {

@@ -28,29 +28,53 @@ function model(): string {
   return getEnv().GEMINI_MODEL;
 }
 
+/** A successful call that returned no usable text — treat as transient + retry. */
+class EmptyResponseError extends Error {
+  constructor(tool: string) {
+    super(`${tool} returned empty text`);
+    this.name = "EmptyResponseError";
+  }
+}
+
+const retryableOrEmpty = (err: unknown): boolean =>
+  err instanceof EmptyResponseError || isTransient(err);
+
 /**
- * Read a public web page via Gemini's URL-context tool and return its visible
- * text. This is the real, live content of the page (as the model reads it) —
- * used to diff "what changed" and to feed signal extraction.
+ * Read a public web page via Gemini's URL-context tool and return a factual
+ * brief of its content (plans, prices, features, headline claims). We ask for an
+ * extraction rather than a verbatim dump on purpose: reproducing a page word-for-
+ * word trips Gemini's RECITATION guardrail (returns empty), whereas a factual
+ * brief returns the real, live content — comprehensive and stable enough to diff
+ * "what changed" and to feed signal extraction.
  */
 export async function fetchPageText(url: string): Promise<string> {
-  const prompt = `Read this web page and output its complete visible text content as plain text. Preserve pricing tables, plan names, prices, feature lists, and headings exactly. Do not summarize, interpret, or add commentary — output only the page's text.\n\nURL: ${url}`;
+  const prompt = `Using the content of this web page, write a factual brief of what it presents. List each plan/tier or product with its price or fee, key features or limits, and any headline claims, promotions, or notable copy. Use short labelled lines and quote prices, plan names, and key phrases exactly as written. Be comprehensive and consistent (this is used for change-tracking across scans). Output ONLY the brief — no preamble, reasoning, or commentary.\n\nURL: ${url}`;
 
-  const response = await withRetry(
-    () =>
-      client().models.generateContent({
-        model: model(),
-        contents: prompt,
-        config: { tools: [{ urlContext: {} }] },
-      }),
-    { label: "gemini:urlContext", shouldRetry: isTransient },
-  );
-
-  const text = (response.text ?? "").trim();
-  if (!text) {
-    log.warn("urlContext returned empty text", { url });
+  try {
+    // Under load, Gemini can return finishReason STOP with EMPTY text (not an
+    // error) — retry those too, not just transport errors.
+    return await withRetry(
+      async () => {
+        const response = await client().models.generateContent({
+          model: model(),
+          contents: prompt,
+          config: { tools: [{ urlContext: {} }] },
+        });
+        const text = (response.text ?? "").trim();
+        if (!text) throw new EmptyResponseError("urlContext");
+        return text;
+      },
+      { label: "gemini:urlContext", shouldRetry: retryableOrEmpty },
+    );
+  } catch (err) {
+    // Exhausted retries — degrade gracefully so one unreadable page doesn't fail
+    // the whole scan; extraction will note the page couldn't be read.
+    log.warn("urlContext failed; returning empty page text", {
+      url,
+      error: (err as Error).message,
+    });
+    return "";
   }
-  return text;
 }
 
 /**
@@ -65,17 +89,28 @@ Look for pricing changes, product launches, funding/news, hiring, customer senti
 Return up to ${num} findings. Output ONLY one finding per line in EXACTLY this format (no numbering, no preamble, no markdown):
 TITLE :: URL :: one-sentence factual snippet`;
 
-  const response = await withRetry(
-    () =>
-      client().models.generateContent({
-        model: model(),
-        contents: prompt,
-        config: { tools: [{ googleSearch: {} }] },
-      }),
-    { label: "gemini:googleSearch", shouldRetry: isTransient },
-  );
-
-  return parseFindings(response.text ?? "", num);
+  try {
+    const text = await withRetry(
+      async () => {
+        const response = await client().models.generateContent({
+          model: model(),
+          contents: prompt,
+          config: { tools: [{ googleSearch: {} }] },
+        });
+        const t = (response.text ?? "").trim();
+        if (!t) throw new EmptyResponseError("googleSearch");
+        return t;
+      },
+      { label: "gemini:googleSearch", shouldRetry: retryableOrEmpty },
+    );
+    return parseFindings(text, num);
+  } catch (err) {
+    // Search is best-effort — the scan still runs on page content alone.
+    log.warn("googleSearch failed; returning no findings", {
+      error: (err as Error).message,
+    });
+    return [];
+  }
 }
 
 /** Parse `TITLE :: URL :: snippet` lines into SerpResults; tolerant of noise. */

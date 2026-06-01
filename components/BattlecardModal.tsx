@@ -39,7 +39,10 @@ export default function BattlecardModal({
       onClick={onClose}
     >
       <div
-        className="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-xl border border-ink-500 bg-ink-800 shadow-glow"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Battlecard for ${companyName}`}
+        className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border border-ink-500 bg-ink-800 shadow-glow"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-ink-500/60 bg-ink-800 px-5 py-3">
@@ -65,6 +68,7 @@ export default function BattlecardModal({
             )}
             <button
               onClick={onClose}
+              aria-label="Close battlecard"
               className="rounded border border-ink-500 px-2 py-0.5 font-mono text-xs text-slate-400 hover:text-slate-100"
             >
               esc ✕

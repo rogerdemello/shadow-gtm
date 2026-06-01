@@ -47,6 +47,9 @@ export default function WarRoomModal({
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="War Room — attack planner"
         className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border border-signal-high/40 bg-ink-800 shadow-glow-red"
         onClick={(e) => e.stopPropagation()}
       >
@@ -62,6 +65,7 @@ export default function WarRoomModal({
               )}
             <button
               onClick={onClose}
+              aria-label="Close War Room"
               className="rounded border border-ink-500 px-2 py-0.5 font-mono text-xs text-slate-400 hover:text-slate-100"
             >
               esc ✕

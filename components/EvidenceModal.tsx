@@ -40,6 +40,9 @@ export default function EvidenceModal({
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Evidence for ${signal.companyName}`}
         className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-ink-500 bg-ink-800 shadow-glow"
         onClick={(e) => e.stopPropagation()}
       >
@@ -50,6 +53,7 @@ export default function EvidenceModal({
           </h2>
           <button
             onClick={onClose}
+            aria-label="Close evidence panel"
             className="rounded border border-ink-500 px-2 py-0.5 font-mono text-xs text-slate-400 hover:text-slate-100"
           >
             esc ✕

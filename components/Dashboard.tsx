@@ -5,14 +5,19 @@ import type { Company, ScanCompanyResult, Signal } from "@/lib/types";
 import AddCompany from "./AddCompany";
 import CompetitorMatrix from "./CompetitorMatrix";
 import IntelligenceFeed from "./IntelligenceFeed";
+import dynamic from "next/dynamic";
 import Recommendations from "./Recommendations";
-import TrendsPanel, { type TrendEntry } from "./TrendsPanel";
-import BattlecardModal from "./BattlecardModal";
-import WarRoomModal from "./WarRoomModal";
-import EvidenceModal from "./EvidenceModal";
 import ErrorBoundary from "./ErrorBoundary";
 import { LiveDot } from "./bits";
 import { readSSE } from "@/lib/sse";
+import type { TrendEntry } from "./TrendsPanel";
+
+// Code-split the heavy/optional surfaces so they're off the initial bundle:
+// TrendsPanel pulls in Recharts; the three modals only mount when opened.
+const TrendsPanel = dynamic(() => import("./TrendsPanel"));
+const BattlecardModal = dynamic(() => import("./BattlecardModal"));
+const WarRoomModal = dynamic(() => import("./WarRoomModal"));
+const EvidenceModal = dynamic(() => import("./EvidenceModal"));
 
 interface AttackPlan {
   markdown: string;

@@ -19,6 +19,7 @@ const BattlecardModal = dynamic(() => import("./BattlecardModal"));
 const WarRoomModal = dynamic(() => import("./WarRoomModal"));
 const EvidenceModal = dynamic(() => import("./EvidenceModal"));
 const DossierModal = dynamic(() => import("./DossierModal"));
+const AnalystModal = dynamic(() => import("./AnalystModal"));
 
 interface DossierState {
   company: Company;
@@ -70,6 +71,8 @@ export default function Dashboard() {
 
   const [dossier, setDossier] = useState<DossierState | null>(null);
   const dossierAbortRef = useRef<AbortController | null>(null);
+
+  const [analystOpen, setAnalystOpen] = useState(false);
 
   const [evidenceSignal, setEvidenceSignal] = useState<Signal | null>(null);
 
@@ -553,6 +556,13 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-3">
           <LiveDot active={scanning} />
+          <button
+            onClick={() => setAnalystOpen(true)}
+            className="rounded-lg border border-accent/40 px-4 py-2.5 text-sm font-bold text-accent transition hover:bg-accent/10"
+            title="Ask the analyst agent about your competitive landscape"
+          >
+            ✦ Ask
+          </button>
           <a
             href="/api/report"
             download
@@ -694,6 +704,8 @@ export default function Dashboard() {
           onRegenerate={() => streamDossier(dossier.company)}
         />
       )}
+
+      {analystOpen && <AnalystModal onClose={() => setAnalystOpen(false)} />}
 
       <footer className="mt-8 flex flex-wrap items-center justify-between gap-2 border-t border-ink-500/40 pt-4 font-mono text-[10px] uppercase tracking-widest text-slate-600">
         <span>

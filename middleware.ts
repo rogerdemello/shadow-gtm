@@ -37,12 +37,12 @@ export async function middleware(req: NextRequest) {
 
   const path = req.nextUrl.pathname;
   const isAuthPage = path === "/login";
-  // App pages that require a session. /invite is intentionally NOT here — it
-  // handles its own "sign in then accept" flow so invitees can land on it first.
-  const isProtectedPage =
-    path === "/" || path === "/settings" || path.startsWith("/settings/");
+  // App pages that require a session. "/" is NOT here — logged-out visitors see
+  // the public marketing landing there (app/page.tsx branches on the session).
+  // /invite handles its own "sign in then accept" flow.
+  const isProtectedPage = path === "/settings" || path.startsWith("/settings/");
 
-  // Unauthenticated → bounce page navigations to /login (APIs self-handle 401).
+  // Unauthenticated → bounce protected page navigations to /login (APIs self-401).
   if (!user && !isAuthPage && isProtectedPage) {
     const dest = req.nextUrl.clone();
     dest.pathname = "/login";

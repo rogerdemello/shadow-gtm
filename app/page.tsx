@@ -1,6 +1,6 @@
-import { redirect } from "next/navigation";
 import Dashboard from "@/components/Dashboard";
 import AccountBar from "@/components/AccountBar";
+import Landing from "@/components/marketing/Landing";
 import { supabaseConfigured } from "@/lib/env";
 import { getServerClient } from "@/lib/db/server";
 import { ensureActiveOrg } from "@/lib/store-context";
@@ -15,7 +15,8 @@ export default async function Page() {
   const {
     data: { user },
   } = await db.auth.getUser();
-  if (!user) redirect("/login");
+  // Logged-out visitors get the public marketing landing, not a login bounce.
+  if (!user) return <Landing />;
 
   // First visit provisions a default workspace; later visits resolve it.
   const orgId = await ensureActiveOrg();

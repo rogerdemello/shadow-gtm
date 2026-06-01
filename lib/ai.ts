@@ -1,9 +1,10 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "@google/genai";
 import { z } from "zod";
 import type { Company, PageType, SerpResult, Signal, SignalType } from "./types";
 import { id } from "./store";
 import { clip } from "./html";
 import { getEnv, geminiConfigured as envGeminiConfigured } from "./env";
+import { geminiClient, runGemini } from "./gemini";
 import { logger } from "./logger";
 import { withRetry, isTransient } from "./retry";
 
@@ -31,15 +32,6 @@ export const PROMPT_VERSION = "2026-06-01.1";
 function thinkingConfig(): { thinkingBudget: number } | undefined {
   const budget = getEnv().GEMINI_THINKING_BUDGET;
   return budget === undefined ? undefined : { thinkingBudget: budget };
-}
-
-let _client: GoogleGenAI | null = null;
-function client(): GoogleGenAI {
-  const apiKey = getEnv().GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not set");
-  }
-  return (_client ??= new GoogleGenAI({ apiKey }));
 }
 
 // ── Structured signal schema ────────────────────────────────────────────────
@@ -236,17 +228,19 @@ ${serpBlock}
 Return structured signals. Use the URLs above as sourceUrl values.`;
 
   const extractCall = (model: string) =>
-    client().models.generateContent({
-      model,
-      contents: userContent,
-      config: {
-        systemInstruction: ANALYST_SYSTEM,
-        responseMimeType: "application/json",
-        responseSchema: EXTRACTION_RESPONSE_SCHEMA,
-        maxOutputTokens: 8192,
-        ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
-      },
-    });
+    runGemini(() =>
+      geminiClient().models.generateContent({
+        model,
+        contents: userContent,
+        config: {
+          systemInstruction: ANALYST_SYSTEM,
+          responseMimeType: "application/json",
+          responseSchema: EXTRACTION_RESPONSE_SCHEMA,
+          maxOutputTokens: 8192,
+          ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
+        },
+      }),
+    );
 
   let response;
   try {
@@ -339,15 +333,17 @@ export async function generateBattlecard(
 ): Promise<string> {
   const response = await withRetry(
     () =>
-      client().models.generateContent({
-        model: MODEL,
-        contents: `Competitor: ${company.name} (${company.domain})\n\nSignals:\n${signalDigest(signals)}\n\nWrite the battlecard.`,
-        config: {
-          systemInstruction: BATTLECARD_SYSTEM,
-          maxOutputTokens: 4096,
-          ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
-        },
-      }),
+      runGemini(() =>
+        geminiClient().models.generateContent({
+          model: MODEL,
+          contents: `Competitor: ${company.name} (${company.domain})\n\nSignals:\n${signalDigest(signals)}\n\nWrite the battlecard.`,
+          config: {
+            systemInstruction: BATTLECARD_SYSTEM,
+            maxOutputTokens: 4096,
+            ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
+          },
+        }),
+      ),
     { label: "gemini:battlecard", shouldRetry: isTransient },
   );
 
@@ -361,15 +357,17 @@ export async function* streamBattlecard(
 ): AsyncGenerator<string> {
   const stream = await withRetry(
     () =>
-      client().models.generateContentStream({
-        model: MODEL,
-        contents: `Competitor: ${company.name} (${company.domain})\n\nSignals:\n${signalDigest(signals)}\n\nWrite the battlecard.`,
-        config: {
-          systemInstruction: BATTLECARD_SYSTEM,
-          maxOutputTokens: 4096,
-          ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
-        },
-      }),
+      runGemini(() =>
+        geminiClient().models.generateContentStream({
+          model: MODEL,
+          contents: `Competitor: ${company.name} (${company.domain})\n\nSignals:\n${signalDigest(signals)}\n\nWrite the battlecard.`,
+          config: {
+            systemInstruction: BATTLECARD_SYSTEM,
+            maxOutputTokens: 4096,
+            ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
+          },
+        }),
+      ),
     { label: "gemini:battlecard-stream", shouldRetry: isTransient },
   );
 
@@ -400,17 +398,19 @@ export async function generateAttackPlan(
 
   const response = await withRetry(
     () =>
-      client().models.generateContent({
-        model: MODEL,
-        contents: `${target}\n\nOperator directive: "${directive}"\n\nLive intelligence signals:\n${signalDigest(
-          signals,
-        )}\n\nWrite the attack plan.`,
-        config: {
-          systemInstruction: WARROOM_SYSTEM,
-          maxOutputTokens: 4096,
-          ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
-        },
-      }),
+      runGemini(() =>
+        geminiClient().models.generateContent({
+          model: MODEL,
+          contents: `${target}\n\nOperator directive: "${directive}"\n\nLive intelligence signals:\n${signalDigest(
+            signals,
+          )}\n\nWrite the attack plan.`,
+          config: {
+            systemInstruction: WARROOM_SYSTEM,
+            maxOutputTokens: 4096,
+            ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
+          },
+        }),
+      ),
     { label: "gemini:warroom", shouldRetry: isTransient },
   );
 
@@ -429,17 +429,19 @@ export async function* streamAttackPlan(
 
   const stream = await withRetry(
     () =>
-      client().models.generateContentStream({
-        model: MODEL,
-        contents: `${target}\n\nOperator directive: "${directive}"\n\nLive intelligence signals:\n${signalDigest(
-          signals,
-        )}\n\nWrite the attack plan.`,
-        config: {
-          systemInstruction: WARROOM_SYSTEM,
-          maxOutputTokens: 4096,
-          ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
-        },
-      }),
+      runGemini(() =>
+        geminiClient().models.generateContentStream({
+          model: MODEL,
+          contents: `${target}\n\nOperator directive: "${directive}"\n\nLive intelligence signals:\n${signalDigest(
+            signals,
+          )}\n\nWrite the attack plan.`,
+          config: {
+            systemInstruction: WARROOM_SYSTEM,
+            maxOutputTokens: 4096,
+            ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
+          },
+        }),
+      ),
     { label: "gemini:warroom-stream", shouldRetry: isTransient },
   );
 

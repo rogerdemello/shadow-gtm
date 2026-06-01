@@ -23,6 +23,15 @@ const EnvSchema = z.object({
   GEMINI_MODEL: z.string().min(1).default("gemini-2.5-flash"),
   /** Optional secondary model for extraction fallback (e.g. gemini-2.5-pro). */
   GEMINI_MODEL_FALLBACK: z.string().min(1).optional(),
+  /** Max concurrent Gemini calls process-wide (default 2) — smooths rate limits. */
+  GEMINI_MAX_CONCURRENCY: z
+    .string()
+    .optional()
+    .transform((raw) => {
+      if (raw === undefined || raw === "") return undefined;
+      const n = Number(raw);
+      return Number.isNaN(n) ? undefined : n;
+    }),
   /** Thinking-budget cap in tokens. Empty/undefined → model default; 0 disables. */
   GEMINI_THINKING_BUDGET: z
     .string()

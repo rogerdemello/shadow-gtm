@@ -18,6 +18,7 @@ import { logger } from "./logger";
 import { planFor } from "./plans";
 import { SCAN_USAGE_KIND, scanQuotaStatus, startOfMonthIso } from "./quota";
 import { dispatchSignalIntegrations } from "./integrations/dispatch";
+import { friendlyGeminiError } from "./gemini";
 
 // ── The core loop ───────────────────────────────────────────────────────────
 //   live web (Gemini grounding) → diff vs last scan → AI signals + reasoning → store
@@ -227,7 +228,7 @@ export async function scanCompany(
 
     return { ...base, signals, changeSummary: combinedSummary };
   } catch (err) {
-    return { ...base, error: (err as Error).message };
+    return { ...base, error: friendlyGeminiError(err) };
   }
 }
 

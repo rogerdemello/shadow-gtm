@@ -1,6 +1,6 @@
-import { GoogleGenAI } from "@google/genai";
 import type { SerpResult } from "./types";
 import { getEnv } from "./env";
+import { geminiClient, runGemini } from "./gemini";
 import { logger } from "./logger";
 import { withRetry, isTransient } from "./retry";
 
@@ -16,13 +16,6 @@ import { withRetry, isTransient } from "./retry";
 // (lib/ai.ts, structured) are deliberately separate calls.
 
 const log = logger.child({ module: "retrieval" });
-
-let _client: GoogleGenAI | null = null;
-function client(): GoogleGenAI {
-  const apiKey = getEnv().GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
-  return (_client ??= new GoogleGenAI({ apiKey }));
-}
 
 function model(): string {
   return getEnv().GEMINI_MODEL;
@@ -55,11 +48,13 @@ export async function fetchPageText(url: string): Promise<string> {
     // error) — retry those too, not just transport errors.
     return await withRetry(
       async () => {
-        const response = await client().models.generateContent({
-          model: model(),
-          contents: prompt,
-          config: { tools: [{ urlContext: {} }] },
-        });
+        const response = await runGemini(() =>
+          geminiClient().models.generateContent({
+            model: model(),
+            contents: prompt,
+            config: { tools: [{ urlContext: {} }] },
+          }),
+        );
         const text = (response.text ?? "").trim();
         if (!text) throw new EmptyResponseError("urlContext");
         return text;
@@ -92,11 +87,13 @@ TITLE :: URL :: one-sentence factual snippet`;
   try {
     const text = await withRetry(
       async () => {
-        const response = await client().models.generateContent({
-          model: model(),
-          contents: prompt,
-          config: { tools: [{ googleSearch: {} }] },
-        });
+        const response = await runGemini(() =>
+          geminiClient().models.generateContent({
+            model: model(),
+            contents: prompt,
+            config: { tools: [{ googleSearch: {} }] },
+          }),
+        );
         const t = (response.text ?? "").trim();
         if (!t) throw new EmptyResponseError("googleSearch");
         return t;

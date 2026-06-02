@@ -132,6 +132,17 @@ export interface Database {
         },
         { markdown?: string; company_name?: string }
       >;
+      conversations: Table<
+        {
+          id: string; org_id: string; title: string; messages: unknown;
+          created_at: Timestamp; updated_at: Timestamp;
+        },
+        {
+          id?: string; org_id: string; title: string; messages?: unknown;
+          created_at?: Timestamp; updated_at?: Timestamp;
+        },
+        { title?: string; messages?: unknown; updated_at?: Timestamp }
+      >;
       usage_events: Table<
         {
           id: string; org_id: string; kind: string; tokens_in: number;

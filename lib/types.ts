@@ -124,6 +124,24 @@ export interface DossierTask {
   query: string;
 }
 
+/** A saved analyst conversation (Ask Shadow memory). */
+export interface ConversationMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  updatedAt: string;
+}
+export interface Conversation {
+  id: string;
+  title: string;
+  messages: ConversationMessage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ScanCompanyResult {
   companyId: string;
   companyName: string;

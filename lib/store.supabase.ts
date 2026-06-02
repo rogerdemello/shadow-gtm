@@ -11,6 +11,9 @@ import type {
   Notification,
   OrgSettings,
   ApiKey,
+  Conversation,
+  ConversationMessage,
+  ConversationSummary,
   Dossier,
   FailedJob,
   Integration,
@@ -86,6 +89,12 @@ export interface Store {
 
   saveDossier(d: Dossier): Promise<void>;
   getDossier(companyId: string): Promise<Dossier | undefined>;
+
+  // ── Analyst conversations (memory) ─────────────────────────────────────────
+  listConversations(): Promise<ConversationSummary[]>;
+  getConversation(id: string): Promise<Conversation | undefined>;
+  createConversation(title: string, messages: ConversationMessage[]): Promise<Conversation>;
+  updateConversation(id: string, messages: ConversationMessage[]): Promise<void>;
 
   /** Record a metered operation (cost + quota tracking). Best-effort. */
   recordUsage(event: UsageEvent): Promise<void>;
@@ -441,6 +450,48 @@ export function storeFor(ctx: StoreContext): Store {
         .maybeSingle();
       fail("getDossier", error);
       return data ? rowToDossier(data) : undefined;
+    },
+
+    // ── Conversations ────────────────────────────────────────────────────────
+    async listConversations() {
+      const { data, error } = await db
+        .from("conversations")
+        .select("id, title, updated_at")
+        .eq("org_id", orgId)
+        .order("updated_at", { ascending: false })
+        .limit(30);
+      fail("listConversations", error);
+      return (data ?? []).map((r) => ({ id: r.id, title: r.title, updatedAt: r.updated_at }));
+    },
+
+    async getConversation(id) {
+      const { data, error } = await db
+        .from("conversations")
+        .select("*")
+        .eq("org_id", orgId)
+        .eq("id", id)
+        .maybeSingle();
+      fail("getConversation", error);
+      return data ? rowToConversation(data) : undefined;
+    },
+
+    async createConversation(title, messages) {
+      const { data, error } = await db
+        .from("conversations")
+        .insert({ org_id: orgId, title: title.slice(0, 120), messages })
+        .select("*")
+        .single();
+      fail("createConversation", error);
+      return rowToConversation(data!);
+    },
+
+    async updateConversation(id, messages) {
+      const { error } = await db
+        .from("conversations")
+        .update({ messages, updated_at: new Date().toISOString() })
+        .eq("org_id", orgId)
+        .eq("id", id);
+      fail("updateConversation", error);
     },
 
     // ── Usage metering ──────────────────────────────────────────────────────
@@ -1006,6 +1057,16 @@ export function rowToBattlecard(r: Tables["battlecards"]["Row"]): Battlecard {
     companyName: r.company_name,
     markdown: r.markdown,
     createdAt: r.created_at,
+  };
+}
+
+export function rowToConversation(r: Tables["conversations"]["Row"]): Conversation {
+  return {
+    id: r.id,
+    title: r.title,
+    messages: (r.messages as ConversationMessage[] | null) ?? [],
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
   };
 }
 

@@ -48,6 +48,13 @@ const jsonStore: Store = {
   // Dossiers aren't persisted in the keyless demo (generated on demand).
   saveDossier: async () => {},
   getDossier: async () => undefined,
+  // Conversations aren't persisted in the keyless demo (ephemeral chat).
+  listConversations: async () => [],
+  getConversation: async () => undefined,
+  createConversation: async () => {
+    throw new Error("Saving conversations requires a configured workspace.");
+  },
+  updateConversation: async () => {},
   // The keyless JSON demo doesn't meter usage or alert.
   recordUsage: async () => {},
   getAlertThreshold: async () => 70,

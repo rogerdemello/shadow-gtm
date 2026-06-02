@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { readSSE } from "@/lib/sse";
 import type { ActionProposal } from "@/lib/agent";
+import type { ConversationSummary } from "@/lib/types";
 import Markdown from "./Markdown";
 
 interface Msg {
@@ -46,14 +47,84 @@ export default function AnalystModal({
   const [busy, setBusy] = useState(false);
   const [steps, setSteps] = useState<string[]>([]);
   const [pending, setPending] = useState<ActionProposal[] | null>(null);
+  const [convId, setConvId] = useState<string | null>(null);
+  const [convList, setConvList] = useState<ConversationSummary[]>([]);
   const bodyRef = useRef<HTMLDivElement>(null);
   const acRef = useRef<AbortController | null>(null);
+  const creatingRef = useRef(false);
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
   }, [messages, steps]);
 
   useEffect(() => () => acRef.current?.abort(), []);
+
+  const loadConvList = () =>
+    fetch("/api/conversations")
+      .then((r) => (r.ok ? r.json() : { conversations: [] }))
+      .then((d) => setConvList(d.conversations ?? []))
+      .catch(() => {});
+
+  useEffect(() => {
+    loadConvList();
+  }, []);
+
+  // Persist the conversation after each settled turn (create then update).
+  // Best-effort: keyless/demo workspaces just keep the chat ephemeral.
+  useEffect(() => {
+    if (busy || messages.length === 0) return;
+    (async () => {
+      try {
+        if (!convId) {
+          if (creatingRef.current) return;
+          creatingRef.current = true;
+          const res = await fetch("/api/conversations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: messages[0]?.content?.slice(0, 80) ?? "Chat", messages }),
+          });
+          creatingRef.current = false;
+          if (res.ok) {
+            const d = await res.json();
+            setConvId(d.conversation?.id ?? null);
+            loadConvList();
+          }
+        } else {
+          await fetch(`/api/conversations/${convId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages }),
+          });
+        }
+      } catch {
+        creatingRef.current = false;
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy, messages]);
+
+  function newConversation() {
+    acRef.current?.abort();
+    setMessages([]);
+    setConvId(null);
+    setPending(null);
+    setSteps([]);
+  }
+
+  async function loadConversation(id: string) {
+    if (id === convId) return;
+    try {
+      const res = await fetch(`/api/conversations/${id}`);
+      if (!res.ok) return;
+      const d = await res.json();
+      setPending(null);
+      setSteps([]);
+      setMessages(d.conversation?.messages ?? []);
+      setConvId(id);
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function ask(question: string) {
     const q = question.trim();
@@ -145,13 +216,37 @@ export default function AnalystModal({
           <h2 className="font-mono text-xs uppercase tracking-widest text-accent">
             ✦ Ask Shadow · analyst
           </h2>
-          <button
-            onClick={onClose}
-            aria-label="Close analyst"
-            className="rounded border border-ink-500 px-2 py-0.5 font-mono text-xs text-slate-400 hover:text-slate-100"
-          >
-            esc ✕
-          </button>
+          <div className="flex items-center gap-2">
+            {convList.length > 0 && (
+              <select
+                value={convId ?? ""}
+                onChange={(e) => (e.target.value ? loadConversation(e.target.value) : newConversation())}
+                className="max-w-[160px] rounded border border-ink-500 bg-ink-900 px-2 py-1 font-mono text-[11px] text-slate-300 outline-none focus:border-accent/60"
+                aria-label="Past conversations"
+              >
+                <option value="">+ New conversation</option>
+                {convList.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title.slice(0, 40)}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              onClick={newConversation}
+              title="New conversation"
+              className="rounded border border-ink-500 px-2 py-0.5 font-mono text-xs text-slate-400 hover:text-accent"
+            >
+              + New
+            </button>
+            <button
+              onClick={onClose}
+              aria-label="Close analyst"
+              className="rounded border border-ink-500 px-2 py-0.5 font-mono text-xs text-slate-400 hover:text-slate-100"
+            >
+              esc ✕
+            </button>
+          </div>
         </div>
 
         <div ref={bodyRef} className="flex-1 space-y-3 overflow-y-auto px-5 py-4">

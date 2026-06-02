@@ -674,13 +674,14 @@ export function storeFor(ctx: StoreContext): Store {
     async getAlertRule() {
       const { data } = await db
         .from("alert_rules")
-        .select("min_opportunity, channels, digest_enabled")
+        .select("min_opportunity, channels, digest_enabled, autonomy_level")
         .eq("org_id", orgId)
         .maybeSingle();
       return {
         minOpportunity: data?.min_opportunity ?? 70,
         channels: data?.channels ?? ["in_app"],
         digestEnabled: data?.digest_enabled ?? true,
+        autonomyLevel: data?.autonomy_level ?? "none",
       };
     },
 
@@ -689,6 +690,7 @@ export function storeFor(ctx: StoreContext): Store {
       if (patch.minOpportunity !== undefined) row.min_opportunity = patch.minOpportunity;
       if (patch.channels !== undefined) row.channels = patch.channels;
       if (patch.digestEnabled !== undefined) row.digest_enabled = patch.digestEnabled;
+      if (patch.autonomyLevel !== undefined) row.autonomy_level = patch.autonomyLevel;
       // Upsert: the row may not exist yet (defaults applied in code until then).
       const { error } = await db
         .from("alert_rules")

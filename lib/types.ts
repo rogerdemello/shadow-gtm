@@ -220,10 +220,14 @@ export interface OrgSettings {
 }
 
 /** Per-org alerting configuration (one row; defaults applied when absent). */
+/** How autonomous the post-scan agent is: off, draft-recommendations, or auto-deep-dive. */
+export type AutonomyLevel = "none" | "triage" | "deep_dive";
+
 export interface AlertRule {
   minOpportunity: number;
   channels: string[];
   digestEnabled: boolean;
+  autonomyLevel: AutonomyLevel;
 }
 
 /** Aggregated usage over a window, for the Usage tab + quota math. */

@@ -44,6 +44,28 @@ export async function enqueueScanJob(
   return data.id;
 }
 
+/** Queue an autonomous deep-dive for one company (worker runs the dossier agent). */
+export async function enqueueDossierJob(
+  db: Db,
+  input: { orgId: string; companyId: string },
+): Promise<string | null> {
+  const { data, error } = await db
+    .from("scan_jobs")
+    .insert({
+      org_id: input.orgId,
+      company_id: input.companyId,
+      kind: "dossier",
+      run_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+  if (error) {
+    log.error("enqueueDossierJob failed", error, { orgId: input.orgId });
+    return null;
+  }
+  return data.id;
+}
+
 /** Claim up to `limit` due pending jobs, marking them running. Single-worker
  *  safe; multi-worker has a small race window (acceptable — jobs are idempotent
  *  enough and retried). */

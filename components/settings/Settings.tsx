@@ -1079,6 +1079,27 @@ function AlertsTab() {
         Weekly digest email
       </label>
 
+      <div className="mt-4">
+        <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-slate-500">
+          Autonomy — what the agent does after a scheduled scan
+        </p>
+        <select
+          value={rule.autonomyLevel}
+          onChange={(e) =>
+            setRule({ ...rule, autonomyLevel: e.target.value as AlertRule["autonomyLevel"] })
+          }
+          className="w-full rounded border border-ink-500 bg-ink-900 px-2 py-2 text-sm text-slate-200 outline-none focus:border-accent/60"
+        >
+          <option value="none">Off — just raise alerts</option>
+          <option value="triage">Triage — draft a recommended move on alert-worthy movement</option>
+          <option value="deep_dive">Deep dive — also auto-research spiking competitors</option>
+        </select>
+        <p className="mt-1 text-[11px] text-slate-600">
+          Runs in the background worker; uses extra Gemini calls only when signals cross the
+          threshold.
+        </p>
+      </div>
+
       <button
         onClick={save}
         disabled={saving}

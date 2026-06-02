@@ -18,6 +18,7 @@ export type JobStatusEnum = "pending" | "running" | "done" | "failed";
 export type ScheduleCadenceEnum = "hourly" | "daily" | "weekly";
 export type PlanTierEnum = "free" | "startup" | "growth" | "enterprise";
 export type SignalStatusEnum = "active" | "handled" | "dismissed";
+export type AutonomyLevelEnum = "none" | "triage" | "deep_dive";
 
 type Timestamp = string;
 
@@ -175,13 +176,13 @@ export interface Database {
       scan_jobs: Table<
         {
           id: string; org_id: string; company_id: string; scan_id: string | null;
-          status: JobStatusEnum; run_at: Timestamp; attempts: number;
+          status: JobStatusEnum; kind: string; run_at: Timestamp; attempts: number;
           max_attempts: number; error: string | null; started_at: Timestamp | null;
           finished_at: Timestamp | null; created_at: Timestamp;
         },
         {
           id?: string; org_id: string; company_id: string; scan_id?: string | null;
-          status?: JobStatusEnum; run_at?: Timestamp; attempts?: number;
+          status?: JobStatusEnum; kind?: string; run_at?: Timestamp; attempts?: number;
           max_attempts?: number; error?: string | null; started_at?: Timestamp | null;
           finished_at?: Timestamp | null; created_at?: Timestamp;
         },
@@ -194,15 +195,17 @@ export interface Database {
       alert_rules: Table<
         {
           org_id: string; min_opportunity: number; channels: string[];
-          digest_enabled: boolean; last_digest_at: Timestamp | null; created_at: Timestamp;
+          digest_enabled: boolean; last_digest_at: Timestamp | null;
+          autonomy_level: AutonomyLevelEnum; created_at: Timestamp;
         },
         {
           org_id: string; min_opportunity?: number; channels?: string[];
-          digest_enabled?: boolean; last_digest_at?: Timestamp | null; created_at?: Timestamp;
+          digest_enabled?: boolean; last_digest_at?: Timestamp | null;
+          autonomy_level?: AutonomyLevelEnum; created_at?: Timestamp;
         },
         {
           min_opportunity?: number; channels?: string[]; digest_enabled?: boolean;
-          last_digest_at?: Timestamp | null;
+          last_digest_at?: Timestamp | null; autonomy_level?: AutonomyLevelEnum;
         }
       >;
       notifications: Table<

@@ -47,6 +47,15 @@ export async function PATCH(req: Request) {
   if (body.digestEnabled !== undefined) {
     patch.digestEnabled = Boolean(body.digestEnabled);
   }
+  if (body.autonomyLevel !== undefined) {
+    if (!["none", "triage", "deep_dive"].includes(String(body.autonomyLevel))) {
+      return NextResponse.json(
+        { error: "autonomyLevel must be none | triage | deep_dive" },
+        { status: 400 },
+      );
+    }
+    patch.autonomyLevel = body.autonomyLevel;
+  }
 
   const r = await contextOrError();
   if (r.res) return r.res;

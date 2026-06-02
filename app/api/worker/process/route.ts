@@ -2,10 +2,14 @@ import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { getServiceClient } from "@/lib/db/service";
 import { storeFor } from "@/lib/store.supabase";
+import { id as newId } from "@/lib/store";
 import { scanCompany } from "@/lib/workflow";
+import { runDossierStream } from "@/lib/dossier";
+import { runTriage } from "@/lib/autonomy";
 import {
   claimDueJobs,
   completeJob,
+  enqueueDossierJob,
   enqueueDueFromSchedules,
   failJob,
   sendDueDigests,
@@ -60,14 +64,66 @@ export async function POST(req: Request) {
         failed++;
         continue;
       }
+
+      // Autonomous deep-dive job (enqueued by the triage agent).
+      if (job.kind === "dossier") {
+        let md = "";
+        for await (const ev of runDossierStream(company)) {
+          if (ev.type === "done") md = ev.markdown;
+          else if (ev.type === "error") throw new Error(ev.error);
+        }
+        if (md) {
+          await store.saveDossier({
+            id: newId(),
+            companyId: company.id,
+            companyName: company.name,
+            markdown: md,
+            createdAt: new Date().toISOString(),
+          });
+          await store.recordUsage({ kind: "gemini_dossier", companyId: company.id, units: 1 });
+        }
+        await completeJob(db, job.id, null);
+        done++;
+        continue;
+      }
+
+      // Standard scan job.
       const scan = await store.createScan([company.id]);
       const result = await scanCompany(store, company, scan.id);
       if (result.error) {
         await failJob(db, job, result.error);
         failed++;
-      } else {
-        await completeJob(db, job.id, scan.id);
-        done++;
+        continue;
+      }
+      await completeJob(db, job.id, scan.id);
+      done++;
+
+      // Proactive autonomy: triage the scan's high-opportunity signals.
+      try {
+        const rule = await store.getAlertRule();
+        if (rule.autonomyLevel !== "none") {
+          const alerts = result.signals.filter((s) => s.opportunityScore >= rule.minOpportunity);
+          if (alerts.length > 0) {
+            const verdict = await runTriage(company, alerts);
+            if (verdict?.worthy) {
+              await store.createNotifications([
+                {
+                  companyId: company.id,
+                  companyName: company.name,
+                  kind: "triage",
+                  title: `Agent take · ${company.name}`,
+                  body: verdict.recommendation,
+                  opportunityScore: Math.max(...alerts.map((s) => s.opportunityScore)),
+                },
+              ]);
+              if (verdict.deepDive && rule.autonomyLevel === "deep_dive") {
+                await enqueueDossierJob(db, { orgId: job.org_id, companyId: company.id });
+              }
+            }
+          }
+        }
+      } catch (e) {
+        log.warn("autonomy triage failed", { company: company.name, error: (e as Error).message });
       }
     } catch (err) {
       await failJob(db, job, (err as Error).message);

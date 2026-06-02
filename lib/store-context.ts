@@ -74,7 +74,12 @@ const jsonStore: Store = {
   revokeInvitation: async () => {},
   getOrgSettings: async () => ({ id: "demo", name: "Demo Workspace", slug: null }),
   updateOrgName: async () => {},
-  getAlertRule: async () => ({ minOpportunity: 70, channels: ["in_app"], digestEnabled: true }),
+  getAlertRule: async () => ({
+    minOpportunity: 70,
+    channels: ["in_app"],
+    digestEnabled: true,
+    autonomyLevel: "none" as const,
+  }),
   updateAlertRule: async () => {},
   getUsageSummary: async (sinceIso: string) => ({
     since: sinceIso,

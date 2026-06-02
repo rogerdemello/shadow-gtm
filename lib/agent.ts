@@ -25,14 +25,25 @@ export interface ChatMessage {
   content: string;
 }
 
+/** A proposed mutating action, surfaced for the user to Confirm/Cancel in chat. */
+export interface ActionProposal {
+  tool: string;
+  args: Record<string, unknown>;
+  summary: string;
+  /** "server" → executed via POST /api/agent/act; "client" → drives an existing UI. */
+  executor: "server" | "client";
+}
+
 export type AgentEvent =
   | { type: "tool"; name: string; args: Record<string, unknown> }
+  | { type: "proposal"; proposals: ActionProposal[] }
   | { type: "answer"; text: string }
   | { type: "error"; error: string };
 
 const SYSTEM = `You are Shadow, a senior GTM competitive-intelligence analyst embedded in this workspace. Answer the operator's questions by USING THE TOOLS to ground every claim — never guess.
 - Prefer the workspace's own data: list_companies, search_signals, get_trends, get_dossier.
 - Use web_search for fresh external facts not in the workspace.
+- You can also TAKE ACTIONS when the operator asks (or it clearly helps): add_competitor, run_scan, run_deep_dive, generate_battlecard, set_signal_status, set_alert_threshold. These are proposed to the operator for one-click confirmation — call the tool when appropriate; the system handles the confirmation.
 - You may call several tools (in sequence) before answering.
 - Cite the companies and sources you used. If the data is thin, say so plainly.
 Be concise, specific, and action-oriented — you're briefing a revenue team.`;
@@ -85,7 +96,107 @@ const DECLARATIONS: FunctionDeclaration[] = [
       required: ["query"],
     },
   },
+  // ── Action tools (mutating — proposed for confirmation, never auto-run) ──────
+  {
+    name: "add_competitor",
+    description: "Add a competitor to the watchlist. Use when the operator wants to track a new company.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        name: { type: Type.STRING },
+        domain: { type: Type.STRING, description: "Root domain, e.g. notion.so" },
+        pricingUrl: { type: Type.STRING, description: "Optional pricing page URL to monitor." },
+      },
+      required: ["name", "domain"],
+    },
+  },
+  {
+    name: "run_scan",
+    description: "Run an intelligence scan. Omit companyName to scan the whole watchlist.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: { companyName: { type: Type.STRING } },
+    },
+  },
+  {
+    name: "run_deep_dive",
+    description: "Run the deep-dive research agent on a competitor to build a full dossier.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: { companyName: { type: Type.STRING } },
+      required: ["companyName"],
+    },
+  },
+  {
+    name: "generate_battlecard",
+    description: "Generate a sales battlecard for a competitor from its signals.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: { companyName: { type: Type.STRING } },
+      required: ["companyName"],
+    },
+  },
+  {
+    name: "set_signal_status",
+    description: "Mark a signal handled or dismissed. Identify it by competitor + a snippet of its description.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        companyName: { type: Type.STRING },
+        description: { type: Type.STRING, description: "Part of the signal's description to match." },
+        status: { type: Type.STRING, description: "active | handled | dismissed" },
+      },
+      required: ["status"],
+    },
+  },
+  {
+    name: "set_alert_threshold",
+    description: "Set the org's opportunity-score alert threshold (0–100).",
+    parameters: {
+      type: Type.OBJECT,
+      properties: { value: { type: Type.NUMBER } },
+      required: ["value"],
+    },
+  },
 ];
+
+// Action tools are NOT executed in the loop — they're surfaced as proposals the
+// user confirms. "server" actions run via POST /api/agent/act; "client" actions
+// drive an existing streamed UI (scan / deep dive / battlecard).
+const ACTION_TOOLS: Record<
+  string,
+  { executor: "server" | "client"; summarize: (a: Record<string, unknown>) => string }
+> = {
+  add_competitor: {
+    executor: "server",
+    summarize: (a) => `Add **${a.name}** (${a.domain}) to the watchlist`,
+  },
+  set_signal_status: {
+    executor: "server",
+    summarize: (a) =>
+      `Mark ${a.companyName ? `**${a.companyName}** ` : ""}signal "${String(a.description ?? "").slice(0, 40)}" as **${a.status}**`,
+  },
+  set_alert_threshold: {
+    executor: "server",
+    summarize: (a) => `Set the alert threshold to **${a.value}**`,
+  },
+  run_scan: {
+    executor: "client",
+    summarize: (a) => `Run an intelligence scan${a.companyName ? ` on **${a.companyName}**` : " on the whole watchlist"}`,
+  },
+  run_deep_dive: {
+    executor: "client",
+    summarize: (a) => `Run a deep-dive dossier on **${a.companyName}**`,
+  },
+  generate_battlecard: {
+    executor: "client",
+    summarize: (a) => `Generate a battlecard for **${a.companyName}**`,
+  },
+};
+
+export function isActionTool(name: string): boolean {
+  return name in ACTION_TOOLS;
+}
 
 async function findCompany(store: Store, name?: string) {
   if (!name) return undefined;
@@ -184,7 +295,20 @@ export async function* runAgent(
         return;
       }
 
-      // Record the model's tool-calling turn, then run each tool and feed results back.
+      // If the model wants to take a mutating action, don't execute it — surface
+      // a proposal for the operator to confirm, and end the turn here.
+      const actionCalls = calls.filter((c) => isActionTool(c.name ?? ""));
+      if (actionCalls.length > 0) {
+        const proposals: ActionProposal[] = actionCalls.map((c) => {
+          const args = (c.args ?? {}) as Record<string, unknown>;
+          const meta = ACTION_TOOLS[c.name ?? ""];
+          return { tool: c.name ?? "", args, summary: meta.summarize(args), executor: meta.executor };
+        });
+        yield { type: "proposal", proposals };
+        return;
+      }
+
+      // Read tools: record the model's turn, run each, feed results back.
       const modelContent = res.candidates?.[0]?.content;
       if (modelContent) contents.push(modelContent);
 

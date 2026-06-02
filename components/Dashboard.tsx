@@ -500,6 +500,30 @@ export default function Dashboard() {
     setDossier(null);
   }, []);
 
+  // Run a confirmed client-side action proposed by the analyst (drives existing UIs).
+  const handleAgentAction = useCallback(
+    (tool: string, args: Record<string, unknown>) => {
+      const findCo = (n: unknown) => {
+        const q = String(n ?? "").toLowerCase();
+        return (
+          companies.find((c) => c.name.toLowerCase() === q) ||
+          companies.find((c) => c.name.toLowerCase().includes(q) || c.domain.includes(q))
+        );
+      };
+      setAnalystOpen(false); // surface the triggered UI
+      if (tool === "run_scan") {
+        runScan();
+      } else if (tool === "run_deep_dive") {
+        const c = findCo(args.companyName);
+        if (c) openDossier(c);
+      } else if (tool === "generate_battlecard") {
+        const c = findCo(args.companyName);
+        if (c) openBattlecard(c);
+      }
+    },
+    [companies, runScan, openDossier, openBattlecard],
+  );
+
   // Esc closes whichever modal is open and cancels any in-flight stream.
   useEffect(() => {
     if (!card && !warOpen && !evidenceSignal && !dossier) return;
@@ -705,7 +729,16 @@ export default function Dashboard() {
         />
       )}
 
-      {analystOpen && <AnalystModal onClose={() => setAnalystOpen(false)} />}
+      {analystOpen && (
+        <AnalystModal
+          onClose={() => setAnalystOpen(false)}
+          onAction={handleAgentAction}
+          onActed={() => {
+            loadState();
+            loadTrends();
+          }}
+        />
+      )}
 
       <footer className="mt-8 flex flex-wrap items-center justify-between gap-2 border-t border-ink-500/40 pt-4 font-mono text-[10px] uppercase tracking-widest text-slate-600">
         <span>

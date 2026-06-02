@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { readSSE } from "@/lib/sse";
+import type { ActionProposal } from "@/lib/agent";
 import Markdown from "./Markdown";
 
 interface Msg {
@@ -11,6 +12,7 @@ interface Msg {
 
 type AgentEvent =
   | { type: "tool"; name: string; args: Record<string, unknown> }
+  | { type: "proposal"; proposals: ActionProposal[] }
   | { type: "answer"; text: string }
   | { type: "error"; error: string };
 
@@ -28,11 +30,22 @@ const TOOL_LABEL: Record<string, string> = {
   web_search: "searching the live web",
 };
 
-export default function AnalystModal({ onClose }: { onClose: () => void }) {
+export default function AnalystModal({
+  onClose,
+  onAction,
+  onActed,
+}: {
+  onClose: () => void;
+  /** Run a confirmed client-side action (run_scan / run_deep_dive / generate_battlecard). */
+  onAction?: (tool: string, args: Record<string, unknown>) => void;
+  /** Called after a confirmed server action so the dashboard can refresh. */
+  onActed?: () => void;
+}) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [steps, setSteps] = useState<string[]>([]);
+  const [pending, setPending] = useState<ActionProposal[] | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const acRef = useRef<AbortController | null>(null);
 
@@ -68,6 +81,9 @@ export default function AnalystModal({ onClose }: { onClose: () => void }) {
         if (ac.signal.aborted) return;
         if (ev.type === "tool") {
           setSteps((s) => [...s, TOOL_LABEL[ev.name] ?? ev.name]);
+        } else if (ev.type === "proposal") {
+          setPending(ev.proposals);
+          setSteps([]);
         } else if (ev.type === "answer") {
           setMessages((m) => [...m, { role: "assistant", content: ev.text }]);
           setSteps([]);
@@ -83,6 +99,34 @@ export default function AnalystModal({ onClose }: { onClose: () => void }) {
       if (acRef.current === ac) acRef.current = null;
       setBusy(false);
     }
+  }
+
+  async function confirmProposal(p: ActionProposal) {
+    setPending(null);
+    if (p.executor === "client") {
+      onAction?.(p.tool, p.args);
+      setMessages((m) => [...m, { role: "assistant", content: `✓ ${p.summary} — opening.` }]);
+      return;
+    }
+    // Server action: execute via the act endpoint.
+    try {
+      const res = await fetch("/api/agent/act", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tool: p.tool, args: p.args }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Action failed (${res.status})`);
+      setMessages((m) => [...m, { role: "assistant", content: `✓ ${data.summary ?? p.summary}` }]);
+      onActed?.();
+    } catch (e) {
+      setMessages((m) => [...m, { role: "assistant", content: `**Error:** ${(e as Error).message}` }]);
+    }
+  }
+
+  function cancelProposals() {
+    setPending(null);
+    setMessages((m) => [...m, { role: "assistant", content: "Okay — cancelled." }]);
   }
 
   return (
@@ -154,6 +198,35 @@ export default function AnalystModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
         </div>
+
+        {pending && pending.length > 0 && (
+          <div className="border-t border-accent/30 bg-accent/5 px-4 py-3">
+            <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-accent">
+              Confirm action{pending.length > 1 ? "s" : ""}
+            </p>
+            <ul className="mb-2 space-y-1">
+              {pending.map((p, i) => (
+                <li key={i} className="text-sm text-slate-200">
+                  <Markdown source={`• ${p.summary}`} />
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-2">
+              <button
+                onClick={() => pending.forEach(confirmProposal)}
+                className="rounded-lg bg-accent px-4 py-1.5 text-sm font-bold text-ink-900 transition hover:brightness-110"
+              >
+                Confirm
+              </button>
+              <button
+                onClick={cancelProposals}
+                className="rounded-lg border border-ink-500 px-4 py-1.5 text-sm text-slate-300 transition hover:border-slate-500"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         <form
           onSubmit={(e) => {

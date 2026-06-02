@@ -64,6 +64,13 @@ async function fetchAndDiff(
   // Gemini reads the live page (URL-context tool) and returns its text. We still
   // run it through htmlToText to normalize whitespace/entities for stable diffs.
   const text = htmlToText(await fetchPageText(url));
+
+  // The page couldn't be read (empty / RECITATION-blocked / rate-limited). Skip
+  // it entirely — don't persist an empty snapshot or feed blank text to the model.
+  if (text.trim().length < 40) {
+    return { pageType, url, text: "", changeSummary: null, changed: false };
+  }
+
   const newHash = hash(text);
   const prev = await store.latestSnapshot(company.id, pageType);
   const changed = !prev || prev.hash !== newHash;

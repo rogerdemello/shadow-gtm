@@ -5,6 +5,7 @@ import type {
   Battlecard,
   Company,
   Invitation,
+  MarketNarrative,
   Member,
   MemberRole,
   NewNotification,
@@ -97,6 +98,10 @@ export interface Store {
   getConversation(id: string): Promise<Conversation | undefined>;
   createConversation(title: string, messages: ConversationMessage[]): Promise<Conversation>;
   updateConversation(id: string, messages: ConversationMessage[]): Promise<void>;
+
+  // ── Market narrative ───────────────────────────────────────────────────────
+  getNarrative(): Promise<MarketNarrative | undefined>;
+  saveNarrative(markdown: string): Promise<void>;
 
   /** Record a metered operation (cost + quota tracking). Best-effort. */
   recordUsage(event: UsageEvent): Promise<void>;
@@ -518,6 +523,26 @@ export function storeFor(ctx: StoreContext): Store {
         .eq("org_id", orgId)
         .eq("id", id);
       fail("updateConversation", error);
+    },
+
+    async getNarrative() {
+      const { data, error } = await db
+        .from("narratives")
+        .select("markdown, created_at")
+        .eq("org_id", orgId)
+        .maybeSingle();
+      fail("getNarrative", error);
+      return data ? { markdown: data.markdown, createdAt: data.created_at } : undefined;
+    },
+
+    async saveNarrative(markdown) {
+      const { error } = await db
+        .from("narratives")
+        .upsert(
+          { org_id: orgId, markdown, created_at: new Date().toISOString() },
+          { onConflict: "org_id" },
+        );
+      fail("saveNarrative", error);
     },
 
     // ── Usage metering ──────────────────────────────────────────────────────

@@ -142,6 +142,12 @@ export interface Conversation {
   updatedAt: string;
 }
 
+/** A cross-competitor "state of the market" memo (one current per org). */
+export interface MarketNarrative {
+  markdown: string;
+  createdAt: string;
+}
+
 export interface ScanCompanyResult {
   companyId: string;
   companyName: string;

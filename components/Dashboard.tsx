@@ -20,6 +20,7 @@ const WarRoomModal = dynamic(() => import("./WarRoomModal"));
 const EvidenceModal = dynamic(() => import("./EvidenceModal"));
 const DossierModal = dynamic(() => import("./DossierModal"));
 const AnalystModal = dynamic(() => import("./AnalystModal"));
+const NarrativeModal = dynamic(() => import("./NarrativeModal"));
 
 interface DossierState {
   company: Company;
@@ -73,6 +74,10 @@ export default function Dashboard() {
   const dossierAbortRef = useRef<AbortController | null>(null);
 
   const [analystOpen, setAnalystOpen] = useState(false);
+  const [narrative, setNarrative] = useState<{ markdown: string | null; loading: boolean } | null>(
+    null,
+  );
+  const narrativeAbortRef = useRef<AbortController | null>(null);
 
   const [evidenceSignal, setEvidenceSignal] = useState<Signal | null>(null);
 
@@ -524,9 +529,75 @@ export default function Dashboard() {
     [companies, runScan, openDossier, openBattlecard],
   );
 
+  // ── Market-narrative memo (agent) ──────────────────────────────────────────
+  const streamNarrative = useCallback(async () => {
+    narrativeAbortRef.current?.abort();
+    const ac = new AbortController();
+    narrativeAbortRef.current = ac;
+    setNarrative({ markdown: "", loading: true });
+    try {
+      const res = await fetch("/api/narrative", { method: "POST", signal: ac.signal });
+      if (!res.ok) {
+        const d = await safeJson(res);
+        throw new Error((typeof d.error === "string" && d.error) || `Memo failed (${res.status})`);
+      }
+      let acc = "";
+      for await (const ev of readSSE<
+        | { type: "delta"; text: string }
+        | { type: "done"; markdown: string }
+        | { type: "error"; error: string }
+      >(res, ac.signal)) {
+        if (ac.signal.aborted) return;
+        if (ev.type === "delta") {
+          acc += ev.text;
+          setNarrative({ markdown: acc, loading: true });
+        } else if (ev.type === "error") {
+          throw new Error(ev.error);
+        } else if (ev.type === "done") {
+          setNarrative({ markdown: ev.markdown, loading: false });
+        }
+      }
+    } catch (e) {
+      if (ac.signal.aborted) return;
+      setNarrative({ markdown: `**Error:** ${(e as Error).message}`, loading: false });
+    } finally {
+      if (narrativeAbortRef.current === ac) narrativeAbortRef.current = null;
+    }
+  }, []);
+
+  const openNarrative = useCallback(async () => {
+    narrativeAbortRef.current?.abort();
+    const ac = new AbortController();
+    narrativeAbortRef.current = ac;
+    setNarrative({ markdown: null, loading: true });
+    try {
+      const res = await fetch("/api/narrative", { signal: ac.signal });
+      if (ac.signal.aborted) return;
+      if (res.ok) {
+        const d = await safeJson(res);
+        const n = d.narrative as { markdown?: string } | null | undefined;
+        if (n?.markdown) {
+          setNarrative({ markdown: n.markdown, loading: false });
+          return;
+        }
+      }
+    } catch {
+      if (ac.signal.aborted) return;
+    } finally {
+      if (narrativeAbortRef.current === ac) narrativeAbortRef.current = null;
+    }
+    await streamNarrative();
+  }, [streamNarrative]);
+
+  const closeNarrative = useCallback(() => {
+    narrativeAbortRef.current?.abort();
+    narrativeAbortRef.current = null;
+    setNarrative(null);
+  }, []);
+
   // Esc closes whichever modal is open and cancels any in-flight stream.
   useEffect(() => {
-    if (!card && !warOpen && !evidenceSignal && !dossier) return;
+    if (!card && !warOpen && !evidenceSignal && !dossier && !narrative) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       bcAbortRef.current?.abort();
@@ -534,11 +605,12 @@ export default function Dashboard() {
       setCard(null);
       closeWarRoom();
       closeDossier();
+      closeNarrative();
       setEvidenceSignal(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [card, warOpen, evidenceSignal, dossier, closeWarRoom, closeDossier]);
+  }, [card, warOpen, evidenceSignal, dossier, narrative, closeWarRoom, closeDossier, closeNarrative]);
 
   const highImpact = signals.filter((s) => s.impact === "high").length;
   const avgScore = signals.length
@@ -586,6 +658,14 @@ export default function Dashboard() {
             title="Ask the analyst agent about your competitive landscape"
           >
             ✦ Ask
+          </button>
+          <button
+            onClick={openNarrative}
+            disabled={companies.length === 0}
+            className="rounded-lg border border-ink-500 px-3 py-2.5 font-mono text-[11px] uppercase tracking-wider text-slate-300 transition hover:border-accent/50 hover:text-accent disabled:opacity-40"
+            title="Generate a state-of-the-market memo across your watchlist"
+          >
+            ◷ Memo
           </button>
           <a
             href="/api/report"
@@ -737,6 +817,15 @@ export default function Dashboard() {
             loadState();
             loadTrends();
           }}
+        />
+      )}
+
+      {narrative && (
+        <NarrativeModal
+          markdown={narrative.markdown}
+          loading={narrative.loading}
+          onClose={closeNarrative}
+          onRegenerate={streamNarrative}
         />
       )}
 

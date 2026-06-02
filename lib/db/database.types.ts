@@ -144,6 +144,11 @@ export interface Database {
         },
         { title?: string; messages?: unknown; updated_at?: Timestamp }
       >;
+      narratives: Table<
+        { org_id: string; markdown: string; created_at: Timestamp },
+        { org_id: string; markdown: string; created_at?: Timestamp },
+        { markdown?: string; created_at?: Timestamp }
+      >;
       usage_events: Table<
         {
           id: string; org_id: string; kind: string; tokens_in: number;

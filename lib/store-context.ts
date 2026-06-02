@@ -56,6 +56,9 @@ const jsonStore: Store = {
     throw new Error("Saving conversations requires a configured workspace.");
   },
   updateConversation: async () => {},
+  // Market narrative isn't persisted in the keyless demo (generated on demand).
+  getNarrative: async () => undefined,
+  saveNarrative: async () => {},
   // The keyless JSON demo doesn't meter usage or alert.
   recordUsage: async () => {},
   getAlertThreshold: async () => 70,

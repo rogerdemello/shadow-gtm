@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { storeOr401 } from "@/lib/store-context";
 import { runDossierStream, dossierToSignals } from "@/lib/dossier";
+import { dossierSignalsEnabled } from "@/lib/env";
 import { id as newId } from "@/lib/store";
 
 export const runtime = "nodejs";
@@ -70,15 +71,18 @@ export async function POST(req: Request) {
             await store
               .recordUsage({ kind: "gemini_dossier", companyId: company.id, units: 1 })
               .catch(() => {});
-            // Feed the dossier's findings back into the pipeline as signals.
-            try {
-              const sigs = await dossierToSignals(company, ev.markdown);
-              if (sigs.length) {
-                await store.addSignals(sigs);
-                send({ type: "signals", count: sigs.length });
+            // Feed the dossier's findings back into the pipeline as signals
+            // (opt-in — an extra Gemini call; off by default to save free quota).
+            if (dossierSignalsEnabled()) {
+              try {
+                const sigs = await dossierToSignals(company, ev.markdown);
+                if (sigs.length) {
+                  await store.addSignals(sigs);
+                  send({ type: "signals", count: sigs.length });
+                }
+              } catch {
+                /* best-effort */
               }
-            } catch {
-              /* best-effort */
             }
           }
         }

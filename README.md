@@ -82,11 +82,13 @@ against the live web (single-tenant JSON store, no auth). That's the whole core
 loop with one key. Run `npm run smoke` for a quick live check of the Gemini
 retrieval path (reads a real page + a grounded search).
 
-> **Heads up on Gemini quotas.** Each competitor in a scan makes ~4 Gemini calls
-> (read pricing + homepage via URL-context, one grounded search, one extraction).
-> The **free tier** allows only ~5 requests/min and ~20/day on `gemini-2.5-flash`
-> — enough to try a competitor or two; a real watchlist needs a paid tier.
-> Rate-limit (429) errors are retried automatically and surfaced cleanly.
+> **Heads up on Gemini quotas.** A scan makes ~4 Gemini calls per competitor;
+> agents (deep dive ~5, analyst/narrative several) make more. The default model is
+> **`gemini-2.5-flash-lite`** — the most generous free-tier limits — and calls are
+> capped at concurrency 1 to stay under the per-minute cap; rate-limit (429) errors
+> are retried and surfaced cleanly. For a real watchlist or heavy agent use, switch
+> `GEMINI_MODEL` to `gemini-2.5-flash`/`-pro` on a paid key (or run Gemini via
+> Vertex AI on Google Cloud's free trial credits). Daily free quota resets each day.
 
 **Full SaaS mode:** provision a Supabase project, set the keys below, and apply
 the migrations (`npm run db:migrate`) — you then get auth, multi-tenant
@@ -97,7 +99,8 @@ workspaces, scheduling, alerts, billing, and the API.
 ```ini
 # ── AI (Gemini) — the only key a scan needs (retrieval + reasoning) ─
 GEMINI_API_KEY=                 # Google AI Studio → aistudio.google.com/apikey
-GEMINI_MODEL=gemini-2.5-flash   # gemini-2.5-pro for deeper reasoning
+GEMINI_MODEL=gemini-2.5-flash-lite   # default; flash/-pro on a paid key
+GEMINI_MAX_CONCURRENCY=1        # 1 = free-tier safe; raise on a paid key
 GEMINI_MODEL_FALLBACK=          # optional secondary model on failure
 GEMINI_THINKING_BUDGET=         # optional token cap; 0 disables thinking
 

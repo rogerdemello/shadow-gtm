@@ -18,7 +18,7 @@ import { logger } from "./logger";
 
 const log = logger.child({ module: "agent" });
 const model = (): string => getEnv().GEMINI_MODEL;
-const MAX_STEPS = 6;
+const MAX_STEPS = 4; // tool rounds before the agent must answer (free-tier friendly)
 
 export interface ChatMessage {
   role: "user" | "assistant";

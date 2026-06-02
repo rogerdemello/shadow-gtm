@@ -36,7 +36,7 @@ afterEach(() => {
 
 describe("getEnv defaults", () => {
   it("applies the default Gemini model", () => {
-    expect(getEnv().GEMINI_MODEL).toBe("gemini-2.5-flash");
+    expect(getEnv().GEMINI_MODEL).toBe("gemini-2.5-flash-lite");
   });
 });
 

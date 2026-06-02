@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getEnv } from "@/lib/env";
+import { getEnv, dossierSignalsEnabled } from "@/lib/env";
 import { getServiceClient } from "@/lib/db/service";
 import { storeFor } from "@/lib/store.supabase";
 import { id as newId } from "@/lib/store";
@@ -81,9 +81,11 @@ export async function POST(req: Request) {
             createdAt: new Date().toISOString(),
           });
           await store.recordUsage({ kind: "gemini_dossier", companyId: company.id, units: 1 });
-          // Feed the autonomous dossier's findings back into the pipeline.
-          const sigs = await dossierToSignals(company, md).catch(() => []);
-          if (sigs.length) await store.addSignals(sigs);
+          // Feed the autonomous dossier's findings back into the pipeline (opt-in).
+          if (dossierSignalsEnabled()) {
+            const sigs = await dossierToSignals(company, md).catch(() => []);
+            if (sigs.length) await store.addSignals(sigs);
+          }
         }
         await completeJob(db, job.id, null);
         done++;

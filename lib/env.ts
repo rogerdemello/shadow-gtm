@@ -20,10 +20,15 @@ const EnvSchema = z.object({
 
   // ── Google Gemini ──────────────────────────────────────────────────────
   GEMINI_API_KEY: z.string().min(1).optional(),
-  GEMINI_MODEL: z.string().min(1).default("gemini-2.5-flash"),
+  // flash-lite has the most generous free-tier limits; switch to gemini-2.5-flash
+  // / -pro on a paid key for deeper reasoning.
+  GEMINI_MODEL: z.string().min(1).default("gemini-2.5-flash-lite"),
   /** Optional secondary model for extraction fallback (e.g. gemini-2.5-pro). */
   GEMINI_MODEL_FALLBACK: z.string().min(1).optional(),
-  /** Max concurrent Gemini calls process-wide (default 2) — smooths rate limits. */
+  /** Skip extracting signals from a finished dossier (saves a Gemini call). Off by
+   *  default to conserve free-tier quota; set "1" to feed dossiers into the pipeline. */
+  DOSSIER_TO_SIGNALS: z.enum(["0", "1"]).optional(),
+  /** Max concurrent Gemini calls process-wide (default 1) — smooths rate limits. */
   GEMINI_MAX_CONCURRENCY: z
     .string()
     .optional()
@@ -115,6 +120,12 @@ export const env: Env = new Proxy({} as Env, {
  *  needs. When false, the dashboard shows the key is missing and scans can't run. */
 export function geminiConfigured(): boolean {
   return Boolean(getEnv().GEMINI_API_KEY);
+}
+
+/** Whether a finished dossier should also be extracted into pipeline signals
+ *  (an extra Gemini call). Off by default to conserve free-tier quota. */
+export function dossierSignalsEnabled(): boolean {
+  return getEnv().DOSSIER_TO_SIGNALS === "1";
 }
 
 /** True once the Supabase project URL + anon key are present (auth + data layer). */

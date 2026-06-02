@@ -6,7 +6,7 @@ import { getEnv } from "./env";
 // plus a global concurrency limiter. A scan bursts several calls per competitor
 // (read pricing + homepage, search, extract); without a cap those fire at once
 // and trip per-minute rate limits. The semaphore serializes them to a safe width
-// (GEMINI_MAX_CONCURRENCY, default 2) across the whole process.
+// (GEMINI_MAX_CONCURRENCY, default 1) across the whole process.
 
 let _client: GoogleGenAI | null = null;
 
@@ -23,7 +23,8 @@ const waiters: Array<() => void> = [];
 
 function maxConcurrency(): number {
   const n = getEnv().GEMINI_MAX_CONCURRENCY;
-  return n && n > 0 ? n : 2;
+  // Default 1 to stay under free-tier per-minute limits; raise on a paid key.
+  return n && n > 0 ? n : 1;
 }
 
 async function acquire(): Promise<void> {

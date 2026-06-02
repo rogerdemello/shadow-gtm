@@ -21,7 +21,9 @@ import { logger } from "./logger";
 const log = logger.child({ module: "dossier" });
 const model = (): string => getEnv().GEMINI_MODEL;
 
-const MAX_TASKS = 5;
+// 3 keeps a deep dive to ~5 Gemini calls (plan + 3 searches + synthesis) — free-
+// tier friendly. Raise on a paid key for broader coverage.
+const MAX_TASKS = 3;
 
 const DEFAULT_TASKS: DossierTask[] = [
   { dimension: "Funding & financials", query: "funding round valuation revenue financials" },

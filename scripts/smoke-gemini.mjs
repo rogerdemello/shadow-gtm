@@ -64,10 +64,19 @@ async function main() {
     }),
   );
   const findings = (search.text ?? "").trim();
-  const lines = findings
+  let lines = findings
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l.includes("::") && /https?:\/\//.test(l));
+  // Fallback (mirrors lib/retrieval.searchWeb): use grounding metadata when the
+  // model doesn't emit the line format (common on flash-lite).
+  if (lines.length === 0) {
+    const chunks = search.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+    lines = chunks
+      .map((c) => c.web)
+      .filter((w) => w?.uri)
+      .map((w) => `${w.title ?? "source"} :: ${w.uri}`);
+  }
   console.log(`parsed ${lines.length} grounded finding(s)`);
   console.log(lines.slice(0, 3).join("\n").slice(0, 400));
 

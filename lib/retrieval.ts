@@ -85,22 +85,34 @@ Return up to ${num} findings. Output ONLY one finding per line in EXACTLY this f
 TITLE :: URL :: one-sentence factual snippet`;
 
   try {
-    const text = await withRetry(
+    const response = await withRetry(
       async () => {
-        const response = await runGemini(() =>
+        const res = await runGemini(() =>
           geminiClient().models.generateContent({
             model: model(),
             contents: prompt,
             config: { tools: [{ googleSearch: {} }] },
           }),
         );
-        const t = (response.text ?? "").trim();
-        if (!t) throw new EmptyResponseError("googleSearch");
-        return t;
+        const text = (res.text ?? "").trim();
+        // Empty only counts as a (retryable) failure if there's also no grounding.
+        if (!text && groundingChunks(res).length === 0) {
+          throw new EmptyResponseError("googleSearch");
+        }
+        return res;
       },
       { label: "gemini:googleSearch", shouldRetry: retryableOrEmpty },
     );
-    return parseFindings(text, num);
+
+    const parsed = parseFindings(response.text ?? "", num);
+    if (parsed.length > 0) return parsed;
+
+    // Fallback: not all models emit the line format. Use the grounding metadata's
+    // cited sources (the real URLs the answer was grounded in).
+    return groundingChunks(response)
+      .map((c) => ({ title: c.title || c.uri, link: c.uri, snippet: "" }))
+      .filter((r) => /^https?:\/\//i.test(r.link))
+      .slice(0, num);
   } catch (err) {
     // Search is best-effort — the scan still runs on page content alone.
     log.warn("googleSearch failed; returning no findings", {
@@ -108,6 +120,19 @@ TITLE :: URL :: one-sentence factual snippet`;
     });
     return [];
   }
+}
+
+/** Extract { uri, title } from a response's grounding metadata (model-agnostic). */
+function groundingChunks(res: unknown): { uri: string; title: string }[] {
+  const candidates = (res as { candidates?: unknown[] })?.candidates;
+  const meta = (candidates?.[0] as { groundingMetadata?: { groundingChunks?: unknown[] } })
+    ?.groundingMetadata;
+  const chunks = meta?.groundingChunks ?? [];
+  return chunks
+    .map((c) => (c as { web?: { uri?: string; title?: string } }).web)
+    .filter((w): w is { uri?: string; title?: string } => Boolean(w))
+    .map((w) => ({ uri: w.uri ?? "", title: w.title ?? "" }))
+    .filter((w) => w.uri);
 }
 
 /** Parse `TITLE :: URL :: snippet` lines into SerpResults; tolerant of noise. */

@@ -34,6 +34,7 @@ const jsonStore: Store = {
   saveSnapshot: json.saveSnapshot,
   listSignals: json.listSignals,
   replaceCompanySignals: json.replaceCompanySignals,
+  addSignals: json.addSignals,
   setSignalStatus: json.setSignalStatus,
   // The JSON demo doesn't retain history; approximate with current signals.
   listSignalHistory: async (companyId: string) =>

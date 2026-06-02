@@ -182,6 +182,13 @@ export async function replaceCompanySignals(
   });
 }
 
+export async function addSignals(signals: Signal[]): Promise<void> {
+  if (signals.length === 0) return;
+  return mutate((db) => {
+    db.signals.push(...signals);
+  });
+}
+
 export async function setSignalStatus(
   signalId: string,
   status: Signal["status"],

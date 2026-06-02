@@ -4,7 +4,7 @@ import { getServiceClient } from "@/lib/db/service";
 import { storeFor } from "@/lib/store.supabase";
 import { id as newId } from "@/lib/store";
 import { scanCompany } from "@/lib/workflow";
-import { runDossierStream } from "@/lib/dossier";
+import { runDossierStream, dossierToSignals } from "@/lib/dossier";
 import { runTriage } from "@/lib/autonomy";
 import {
   claimDueJobs,
@@ -81,6 +81,9 @@ export async function POST(req: Request) {
             createdAt: new Date().toISOString(),
           });
           await store.recordUsage({ kind: "gemini_dossier", companyId: company.id, units: 1 });
+          // Feed the autonomous dossier's findings back into the pipeline.
+          const sigs = await dossierToSignals(company, md).catch(() => []);
+          if (sigs.length) await store.addSignals(sigs);
         }
         await completeJob(db, job.id, null);
         done++;

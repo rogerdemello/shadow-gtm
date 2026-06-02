@@ -71,6 +71,8 @@ export interface Store {
   listSignals(): Promise<Signal[]>;
   /** Replace a company's CURRENT signals with this scan's output, keeping history. */
   replaceCompanySignals(companyId: string, signals: Signal[]): Promise<void>;
+  /** Add signals as current WITHOUT un-currenting existing ones (e.g. from a dossier). */
+  addSignals(signals: Signal[]): Promise<void>;
   /** Full append-only signal history for a company (current + past), oldest first. */
   listSignalHistory(companyId: string): Promise<Signal[]>;
   /** Set a signal's workflow status (active/handled/dismissed). */
@@ -349,6 +351,30 @@ export function storeFor(ctx: StoreContext): Store {
       }));
       const { error } = await db.from("signals").insert(rows);
       fail("replaceCompanySignals.insert", error);
+    },
+
+    async addSignals(signals) {
+      if (signals.length === 0) return;
+      const rows: Tables["signals"]["Insert"][] = signals.map((s) => ({
+        id: s.id,
+        org_id: orgId,
+        company_id: s.companyId,
+        company_name: s.companyName,
+        scan_id: s.scanId || null,
+        type: s.type,
+        description: s.description,
+        impact: s.impact,
+        confidence: s.confidence,
+        opportunity_score: s.opportunityScore,
+        reasoning: s.reasoning,
+        recommended_action: s.recommendedAction,
+        source_url: s.sourceUrl,
+        quote: s.quote ?? null,
+        is_current: true,
+        created_at: s.createdAt,
+      }));
+      const { error } = await db.from("signals").insert(rows);
+      fail("addSignals", error);
     },
 
     // ── Scans ─────────────────────────────────────────────────────────────────

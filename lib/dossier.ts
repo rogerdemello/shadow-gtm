@@ -1,9 +1,10 @@
 import { Type } from "@google/genai";
 import { z } from "zod";
-import type { Company, DossierTask } from "./types";
+import type { Company, DossierTask, Signal } from "./types";
 import type { SerpResult } from "./types";
 import { getEnv } from "./env";
 import { geminiClient, runGemini, friendlyGeminiError } from "./gemini";
+import { extractSignals } from "./ai";
 import { searchWeb } from "./retrieval";
 import { withRetry, isTransient } from "./retry";
 import { logger } from "./logger";
@@ -142,6 +143,25 @@ export type DossierEvent =
   | { type: "delta"; text: string }
   | { type: "done"; markdown: string }
   | { type: "error"; error: string };
+
+/** Turn a finished dossier into structured signals that feed the pipeline.
+ *  Reuses the scan extractor over the dossier text. Best-effort → [] on failure. */
+export async function dossierToSignals(company: Company, markdown: string): Promise<Signal[]> {
+  if (!markdown.trim()) return [];
+  try {
+    const { signals } = await extractSignals({
+      company,
+      pages: [{ pageType: "homepage", url: `${company.domain} (deep-dive dossier)`, text: markdown }],
+      serp: [],
+      changeSummary: null,
+      scanId: "",
+    });
+    return signals;
+  } catch (err) {
+    log.warn("dossierToSignals failed", { error: (err as Error).message });
+    return [];
+  }
+}
 
 /** Run the full agent, yielding progress events then the final dossier. */
 export async function* runDossierStream(company: Company): AsyncGenerator<DossierEvent> {

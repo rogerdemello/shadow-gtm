@@ -99,6 +99,7 @@ export async function scanCompany(
   store: Store,
   company: Company,
   scanId: string,
+  signal?: AbortSignal,
 ): Promise<ScanCompanyResult> {
   const base: ScanCompanyResult = {
     companyId: company.id,
@@ -174,6 +175,7 @@ export async function scanCompany(
       serp,
       changeSummary: combinedSummary,
       scanId,
+      signal,
     });
     const extractLatency = Date.now() - extractStart;
 

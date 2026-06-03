@@ -61,7 +61,7 @@ export async function POST(req: Request) {
       try {
         for await (const chunk of streamAttackPlan(directive, target, signals, (u) => {
           usage = u;
-        })) {
+        }, req.signal)) {
           if (closed) break;
           buffer += chunk;
           send({ type: "delta", text: chunk });

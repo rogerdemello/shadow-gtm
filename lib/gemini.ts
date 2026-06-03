@@ -63,12 +63,14 @@ const fallbackLog = logger.child({ module: "gemini" });
 export async function withModelFallback<T>(
   run: (model: string) => Promise<T>,
   label: string,
+  signal?: AbortSignal,
 ): Promise<T> {
   const { GEMINI_MODEL: primary, GEMINI_MODEL_FALLBACK: fallback } = getEnv();
   try {
     return await withRetry(() => run(primary), { label, shouldRetry: isTransient });
   } catch (err) {
-    if (!fallback || fallback === primary) throw err;
+    // Don't fall back on a client cancellation — the caller is gone.
+    if (signal?.aborted || !fallback || fallback === primary) throw err;
     fallbackLog.warn("primary model failed; trying fallback", {
       label,
       primary,

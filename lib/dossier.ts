@@ -66,6 +66,7 @@ const PLAN_SYSTEM =
 export async function planDossier(
   company: Company,
   onUsage?: (u: GeminiUsage) => void,
+  signal?: AbortSignal,
 ): Promise<DossierTask[]> {
   try {
     const res = await withModelFallback(
@@ -79,10 +80,12 @@ export async function planDossier(
               responseMimeType: "application/json",
               responseSchema: PLAN_SCHEMA,
               maxOutputTokens: 1024,
+              abortSignal: signal,
             },
           }),
         ),
       "dossier:plan",
+      signal,
     );
     onUsage?.(usageOf(res));
     const parsed = PlanZ.parse(JSON.parse(res.text ?? "{}"));
@@ -128,6 +131,7 @@ async function* synthesize(
   company: Company,
   context: string,
   onUsage?: (u: GeminiUsage) => void,
+  signal?: AbortSignal,
 ): AsyncGenerator<string> {
   const stream = await withModelFallback(
     (m) =>
@@ -135,12 +139,14 @@ async function* synthesize(
         geminiClient().models.generateContentStream({
           model: m,
           contents: `Competitor: ${company.name} (${company.domain})\n\nGrounded research findings:\n${context}\n\nWrite the dossier.`,
-          config: { systemInstruction: DOSSIER_SYSTEM, maxOutputTokens: 6144 },
+          config: { systemInstruction: DOSSIER_SYSTEM, maxOutputTokens: 6144, abortSignal: signal },
         }),
       ),
     "dossier:synthesis",
+    signal,
   );
   for await (const chunk of stream) {
+    if (signal?.aborted) return;
     const u = usageOf(chunk);
     if (u.tokensIn || u.tokensOut) onUsage?.(u);
     const text = chunk.text;
@@ -176,7 +182,10 @@ export async function dossierToSignals(company: Company, markdown: string): Prom
 }
 
 /** Run the full agent, yielding progress events then the final dossier. */
-export async function* runDossierStream(company: Company): AsyncGenerator<DossierEvent> {
+export async function* runDossierStream(
+  company: Company,
+  signal?: AbortSignal,
+): AsyncGenerator<DossierEvent> {
   let markdown = "";
   const usage = { tokensIn: 0, tokensOut: 0 };
   const addUsage = (u: GeminiUsage) => {
@@ -184,15 +193,17 @@ export async function* runDossierStream(company: Company): AsyncGenerator<Dossie
     usage.tokensOut += u.tokensOut;
   };
   try {
-    const tasks = await planDossier(company, addUsage);
+    const tasks = await planDossier(company, addUsage, signal);
     yield { type: "plan", tasks };
 
     const gathered: Gathered[] = [];
     for (const task of tasks) {
+      if (signal?.aborted) return; // client gone — stop spending on searches
       const results = await searchWeb(task.query, 5).catch(() => [] as SerpResult[]);
       gathered.push({ dimension: task.dimension, results });
       yield { type: "gather", dimension: task.dimension, found: results.length };
     }
+    if (signal?.aborted) return;
 
     // Synthesis streams cumulative usage; track the max so the accumulated total
     // counts plan + synthesis without double-counting the streamed deltas.
@@ -200,7 +211,7 @@ export async function* runDossierStream(company: Company): AsyncGenerator<Dossie
     yield { type: "synthesis" };
     for await (const delta of synthesize(company, buildContext(gathered), (u) => {
       synthUsage = u;
-    })) {
+    }, signal)) {
       markdown += delta;
       yield { type: "delta", text: delta };
     }

@@ -43,7 +43,7 @@ export async function POST(req: Request) {
         }
       };
       try {
-        for await (const ev of runAgent(store, messages)) {
+        for await (const ev of runAgent(store, messages, req.signal)) {
           send(ev);
         }
       } catch (err) {

@@ -8,7 +8,7 @@ export const maxDuration = 300;
 // Server-Sent Events scan: one GET runs the whole queue and streams results as
 // each competitor completes, so the dashboard feed fills in live from a single
 // connection. (scanCompany never throws — per-company errors ride on the event.)
-export async function GET() {
+export async function GET(req: Request) {
   // Resolve auth/org BEFORE opening the stream so an unauthorized caller gets a
   // clean 401 rather than a half-open event stream.
   const r = await storeOr401();
@@ -46,9 +46,9 @@ export async function GET() {
         });
 
         for (const company of companies) {
-          if (closed) break;
+          if (closed || req.signal.aborted) break;
           send({ type: "company-start", companyId: company.id, name: company.name });
-          const result = await scanCompany(store, company, scan.id);
+          const result = await scanCompany(store, company, scan.id, req.signal);
           send({ type: "company-done", result });
         }
 

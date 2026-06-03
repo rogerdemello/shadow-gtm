@@ -87,6 +87,8 @@ export async function persistWithRetry(
  *  default shouldRetry for HTTP-ish failures. */
 export function isTransient(err: unknown): boolean {
   const msg = (err as Error)?.message?.toLowerCase() ?? "";
+  // A client-cancelled request (disconnect) must never be retried.
+  if ((err as Error)?.name === "AbortError" || /\babort/.test(msg)) return false;
   if (/(\b4\d\d\b|invalid|unauthorized|forbidden|not found|bad request)/.test(msg)) {
     // 429 is retryable despite being 4xx.
     return /\b429\b|rate limit|too many/.test(msg);

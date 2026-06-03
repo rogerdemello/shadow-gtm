@@ -62,7 +62,7 @@ export async function POST(req: Request) {
       };
 
       try {
-        for await (const ev of runDossierStream(company)) {
+        for await (const ev of runDossierStream(company, req.signal)) {
           send(ev);
           if (ev.type === "done") {
             // Persist the dossier with retry; surface a persist_failed event if

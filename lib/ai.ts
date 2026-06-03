@@ -157,6 +157,7 @@ interface ExtractInput {
   serp: SerpResult[];
   changeSummary: string | null;
   scanId: string;
+  signal?: AbortSignal;
 }
 
 /** Token usage reported by Gemini for a single call. */
@@ -193,7 +194,7 @@ export interface ExtractionResult {
 /** Extract + reason in one structured Gemini call. Returns persisted-shape
  *  signals plus the call's token usage (for metering). */
 export async function extractSignals(input: ExtractInput): Promise<ExtractionResult> {
-  const { company, pages, serp, changeSummary, scanId } = input;
+  const { company, pages, serp, changeSummary, scanId, signal } = input;
 
   const serpBlock = serp.length
     ? serp
@@ -237,11 +238,13 @@ Return structured signals. Use the URLs above as sourceUrl values.`;
             responseMimeType: "application/json",
             responseSchema: EXTRACTION_RESPONSE_SCHEMA,
             maxOutputTokens: 8192,
+            abortSignal: signal,
             ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
           },
         }),
       ),
     "gemini:extract",
+    signal,
   );
 
   const usage = usageOf(response);
@@ -336,6 +339,7 @@ export async function* streamBattlecard(
   company: Company,
   signals: Signal[],
   onUsage?: (u: TokenUsage) => void,
+  signal?: AbortSignal,
 ): AsyncGenerator<string> {
   const stream = await withModelFallback(
     (model) =>
@@ -346,14 +350,17 @@ export async function* streamBattlecard(
           config: {
             systemInstruction: BATTLECARD_SYSTEM,
             maxOutputTokens: 4096,
+            abortSignal: signal,
             ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
           },
         }),
       ),
     "gemini:battlecard-stream",
+    signal,
   );
 
   for await (const chunk of stream) {
+    if (signal?.aborted) return;
     const u = usageOf(chunk);
     if (u.totalTokens) onUsage?.(u);
     const text = chunk.text;
@@ -407,6 +414,7 @@ export async function* streamAttackPlan(
   companyName: string | null,
   signals: Signal[],
   onUsage?: (u: TokenUsage) => void,
+  signal?: AbortSignal,
 ): AsyncGenerator<string> {
   const target = companyName
     ? `Target competitor: ${companyName}`
@@ -423,14 +431,17 @@ export async function* streamAttackPlan(
           config: {
             systemInstruction: WARROOM_SYSTEM,
             maxOutputTokens: 4096,
+            abortSignal: signal,
             ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
           },
         }),
       ),
     "gemini:warroom-stream",
+    signal,
   );
 
   for await (const chunk of stream) {
+    if (signal?.aborted) return;
     const u = usageOf(chunk);
     if (u.totalTokens) onUsage?.(u);
     const text = chunk.text;

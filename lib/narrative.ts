@@ -42,7 +42,10 @@ Top signals:\n${top || "  - (none yet)"}`;
 }
 
 /** Stream a state-of-the-market memo across the watchlist. */
-export async function* streamNarrative(store: Store): AsyncGenerator<NarrativeEvent> {
+export async function* streamNarrative(
+  store: Store,
+  signal?: AbortSignal,
+): AsyncGenerator<NarrativeEvent> {
   let markdown = "";
   try {
     const context = await buildMarketContext(store);
@@ -56,13 +59,15 @@ export async function* streamNarrative(store: Store): AsyncGenerator<NarrativeEv
           geminiClient().models.generateContentStream({
             model: m,
             contents: `Competitive landscape (momentum + top signals per competitor):\n\n${context}\n\nWrite the state-of-the-market memo.`,
-            config: { systemInstruction: SYSTEM, maxOutputTokens: 4096 },
+            config: { systemInstruction: SYSTEM, maxOutputTokens: 4096, abortSignal: signal },
           }),
         ),
       "narrative",
+      signal,
     );
     let usage = { tokensIn: 0, tokensOut: 0 };
     for await (const chunk of stream) {
+      if (signal?.aborted) return;
       const u = usageOf(chunk);
       if (u.tokensIn || u.tokensOut) usage = u; // cumulative; last wins
       const text = chunk.text;

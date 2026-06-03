@@ -271,6 +271,7 @@ async function executeTool(
 export async function* runAgent(
   store: Store,
   messages: ChatMessage[],
+  signal?: AbortSignal,
 ): AsyncGenerator<AgentEvent> {
   const contents: Content[] = messages.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
@@ -282,6 +283,7 @@ export async function* runAgent(
 
   try {
     for (let step = 0; step < MAX_STEPS; step++) {
+      if (signal?.aborted) return; // client disconnected — stop the loop
       const res = await withModelFallback(
         (m) =>
           runGemini(() =>
@@ -292,10 +294,12 @@ export async function* runAgent(
                 systemInstruction: SYSTEM,
                 tools: [{ functionDeclarations: DECLARATIONS }],
                 maxOutputTokens: 4096,
+                abortSignal: signal,
               },
             }),
           ),
         "agent:step",
+        signal,
       );
       const u = usageOf(res);
       tokensIn += u.tokensIn;

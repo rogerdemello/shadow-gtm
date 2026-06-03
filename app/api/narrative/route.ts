@@ -16,7 +16,7 @@ export async function GET() {
 }
 
 // Generate a fresh state-of-the-market memo (SSE), persisting on completion.
-export async function POST() {
+export async function POST(req: Request) {
   const r = await storeOr401();
   if (r.res) return r.res;
   const store = r.store;
@@ -37,7 +37,7 @@ export async function POST() {
         }
       };
       try {
-        for await (const ev of streamNarrative(store)) {
+        for await (const ev of streamNarrative(store, req.signal)) {
           send(ev);
           if (ev.type === "done") {
             await persistWithRetry(

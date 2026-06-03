@@ -940,9 +940,28 @@ export function storeFor(ctx: StoreContext): Store {
     },
 
     async recordWebhookResult(id, status) {
+      const ok = status >= 200 && status < 300;
+      // Read the current streak to decide whether to auto-disable a dead endpoint.
+      const { data: current } = await db
+        .from("webhook_endpoints")
+        .select("consecutive_failures")
+        .eq("org_id", orgId)
+        .eq("id", id)
+        .maybeSingle();
+      const failures = ok ? 0 : (current?.consecutive_failures ?? 0) + 1;
+      const update: Tables["webhook_endpoints"]["Update"] = {
+        last_status: status,
+        last_attempt_at: new Date().toISOString(),
+        consecutive_failures: failures,
+      };
+      // Three strikes → disable so a dead receiver stops being retried every alert.
+      if (failures >= 3) {
+        update.enabled = false;
+        logger.warn("disabling webhook after repeated failures", { id, failures });
+      }
       const { error } = await db
         .from("webhook_endpoints")
-        .update({ last_status: status, last_attempt_at: new Date().toISOString() })
+        .update(update)
         .eq("org_id", orgId)
         .eq("id", id);
       if (error) logger.warn("recordWebhookResult failed", { error: error.message });

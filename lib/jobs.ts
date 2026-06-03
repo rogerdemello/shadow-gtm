@@ -121,9 +121,9 @@ export function categorizeJobError(msg: string): string {
   if (/recitation/.test(m)) return "recitation";
   if (/timeout|timed out|etimedout|deadline/.test(m)) return "timeout";
   if (/\b5\d\d\b|unavailable|overloaded|econnreset|network|fetch failed/.test(m)) return "upstream";
+  if (/api key|api_key|unauthenticated|permission|forbidden/.test(m)) return "auth";
   if (/not found|no company|missing/.test(m)) return "not_found";
   if (/parse|json|schema|invalid/.test(m)) return "parse";
-  if (/api key|api_key|unauthenticated|permission|forbidden/.test(m)) return "auth";
   return "unknown";
 }
 

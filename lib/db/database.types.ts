@@ -261,14 +261,17 @@ export interface Database {
         {
           id: string; org_id: string; url: string; secret: string;
           enabled: boolean; last_status: number | null; last_attempt_at: Timestamp | null;
-          created_at: Timestamp;
+          consecutive_failures: number; created_at: Timestamp;
         },
         {
           id?: string; org_id: string; url: string; secret: string;
           enabled?: boolean; last_status?: number | null; last_attempt_at?: Timestamp | null;
-          created_at?: Timestamp;
+          consecutive_failures?: number; created_at?: Timestamp;
         },
-        { enabled?: boolean; last_status?: number | null; last_attempt_at?: Timestamp | null }
+        {
+          enabled?: boolean; last_status?: number | null; last_attempt_at?: Timestamp | null;
+          consecutive_failures?: number;
+        }
       >;
       api_keys: Table<
         {

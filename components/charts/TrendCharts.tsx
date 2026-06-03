@@ -30,7 +30,12 @@ const axisProps = {
 /** Opportunity score over time — top (peak) and average per scan. */
 export function OpportunityTrend({ series }: { series: SeriesPoint[] }) {
   const rows = toRows(series);
+  const last = rows[rows.length - 1];
+  const label = last
+    ? `Opportunity score over ${rows.length} scans. Latest peak ${last.topOpportunity}, average ${last.avgOpportunity}.`
+    : "Opportunity score over time (no data yet).";
   return (
+    <div role="img" aria-label={label}>
     <ResponsiveContainer width="100%" height={160}>
       <LineChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
         <CartesianGrid stroke={CHART.grid} strokeDasharray="3 3" vertical={false} />
@@ -63,13 +68,19 @@ export function OpportunityTrend({ series }: { series: SeriesPoint[] }) {
         />
       </LineChart>
     </ResponsiveContainer>
+    </div>
   );
 }
 
 /** Signal volume per scan. */
 export function VolumeBars({ series }: { series: SeriesPoint[] }) {
   const rows = toRows(series);
+  const last = rows[rows.length - 1];
+  const label = last
+    ? `Signals per scan over ${rows.length} scans. Latest ${last.count}.`
+    : "Signal volume per scan (no data yet).";
   return (
+    <div role="img" aria-label={label}>
     <ResponsiveContainer width="100%" height={120}>
       <BarChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
         <CartesianGrid stroke={CHART.grid} strokeDasharray="3 3" vertical={false} />
@@ -83,5 +94,6 @@ export function VolumeBars({ series }: { series: SeriesPoint[] }) {
         <Bar dataKey="count" name="signals" fill={CHART.bar} radius={[2, 2, 0, 0]} isAnimationActive={false} />
       </BarChart>
     </ResponsiveContainer>
+    </div>
   );
 }

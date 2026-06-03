@@ -71,7 +71,8 @@ export default function CompetitorMatrix({
           No competitors on the watchlist yet.
         </p>
       ) : (
-        <table className="w-full text-left">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-left">
           <thead>
             <tr className="font-mono text-[10px] uppercase tracking-wider text-slate-500">
               <th className="px-4 py-2 font-medium">Company</th>
@@ -160,6 +161,7 @@ export default function CompetitorMatrix({
             })}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

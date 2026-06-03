@@ -1,5 +1,13 @@
 # Shadow GTM — Definitive Best-in-Domain Plan
 
+> **Delivery status (2026-06-03):** P0 (all 8 blockers) ✅ · P1 (all 10 items) ✅ ·
+> P2 substantially ✅ (CRUD completeness, input validation, SERP-aware cache-skip,
+> responsive matrix, chart a11y, quality feedback loop, add-competitor validation).
+> Remaining P2 tail = cosmetic only (idempotency-key headers, short-TTL response
+> cache, conversation threading, assorted micro-polish). Migrations 0018–0021 are
+> authored & type-modeled, applied at deploy via `npm run db:migrate`.
+
+
 > Generated from a multi-agent audit (51 agents, 91 findings, 41 verified against the
 > actual code). Overall readiness at audit time: **71 / 100**. Every item below was
 > checked against real code.

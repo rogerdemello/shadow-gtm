@@ -24,7 +24,7 @@ export default function AddCompany({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !domain.trim()) return;
+    if (!canSubmit) return;
     await onAdd(name.trim(), domain.trim(), pricingUrl.trim() || undefined);
     setName("");
     setDomain("");
@@ -34,6 +34,17 @@ export default function AddCompany({
   const normalize = (d: string) =>
     d.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "").toLowerCase();
   const has = (d: string) => existingDomains.includes(normalize(d));
+
+  // Inline validation for the typed domain.
+  const typed = domain.trim();
+  const isDuplicate = typed.length > 0 && has(typed);
+  const isMalformed = typed.length > 0 && !/^[^\s.]+\.[^\s]+$/.test(normalize(typed));
+  const domainError = isDuplicate
+    ? "Already on your watchlist."
+    : isMalformed
+      ? "Enter a bare domain like hubspot.com."
+      : null;
+  const canSubmit = Boolean(name.trim()) && typed.length > 0 && !domainError;
 
   return (
     <div className="rounded-xl border border-ink-500/60 bg-ink-800/60 p-4">
@@ -53,9 +64,15 @@ export default function AddCompany({
             value={domain}
             onChange={(e) => setDomain(e.target.value)}
             placeholder="Domain (hubspot.com)"
-            className="w-1/2 rounded-lg border border-ink-500 bg-ink-700 px-3 py-2 text-sm outline-none placeholder:text-slate-600 focus:border-accent/60"
+            aria-invalid={Boolean(domainError)}
+            className={`w-1/2 rounded-lg border bg-ink-700 px-3 py-2 text-sm outline-none placeholder:text-slate-600 ${
+              domainError ? "border-signal-high/60 focus:border-signal-high" : "border-ink-500 focus:border-accent/60"
+            }`}
           />
         </div>
+        {domainError && (
+          <p className="font-mono text-[11px] text-signal-high">{domainError}</p>
+        )}
         <input
           value={pricingUrl}
           onChange={(e) => setPricingUrl(e.target.value)}
@@ -64,7 +81,7 @@ export default function AddCompany({
         />
         <button
           type="submit"
-          disabled={busy || !name.trim() || !domain.trim()}
+          disabled={busy || !canSubmit}
           className="w-full rounded-lg bg-accent/90 py-2 text-sm font-semibold text-ink-900 transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
         >
           + Add to watchlist

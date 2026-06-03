@@ -1,15 +1,10 @@
 import type { Store } from "./store.supabase";
-import { getEnv } from "./env";
-import { geminiClient, runGemini, friendlyGeminiError } from "./gemini";
+import { geminiClient, runGemini, friendlyGeminiError, usageOf, withModelFallback } from "./gemini";
 import { computeMomentum } from "./trends";
-import { usageOf } from "./gemini";
-import { withRetry, isTransient } from "./retry";
 
 // ── Market-narrative agent ────────────────────────────────────────────────────
 // Synthesizes a cross-competitor "state of the market" memo from every tracked
 // competitor's momentum + top current signals. Streamed Markdown (no tools).
-
-const model = (): string => getEnv().GEMINI_MODEL;
 
 const SYSTEM = `You are the head of competitive intelligence writing a concise "state of the market" memo for the leadership team. From the per-competitor momentum and top signals provided, write Markdown with:
 - **The big picture** — what's happening across the market right now.
@@ -55,16 +50,16 @@ export async function* streamNarrative(store: Store): AsyncGenerator<NarrativeEv
       yield { type: "error", error: "Add competitors and run a scan first — there's nothing to synthesize yet." };
       return;
     }
-    const stream = await withRetry(
-      () =>
+    const stream = await withModelFallback(
+      (m) =>
         runGemini(() =>
           geminiClient().models.generateContentStream({
-            model: model(),
+            model: m,
             contents: `Competitive landscape (momentum + top signals per competitor):\n\n${context}\n\nWrite the state-of-the-market memo.`,
             config: { systemInstruction: SYSTEM, maxOutputTokens: 4096 },
           }),
         ),
-      { label: "narrative", shouldRetry: isTransient },
+      "narrative",
     );
     let usage = { tokensIn: 0, tokensOut: 0 };
     for await (const chunk of stream) {

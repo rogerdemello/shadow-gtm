@@ -1,11 +1,9 @@
 import { Type } from "@google/genai";
 import type { Content, FunctionDeclaration } from "@google/genai";
 import type { Store } from "./store.supabase";
-import { getEnv } from "./env";
-import { geminiClient, runGemini, friendlyGeminiError, usageOf } from "./gemini";
+import { geminiClient, runGemini, friendlyGeminiError, usageOf, withModelFallback } from "./gemini";
 import { searchWeb } from "./retrieval";
 import { computeMomentum } from "./trends";
-import { withRetry, isTransient } from "./retry";
 import { logger } from "./logger";
 
 // ── Conversational analyst agent ──────────────────────────────────────────────
@@ -17,7 +15,6 @@ import { logger } from "./logger";
 // web_search internally runs its own grounded Gemini call.
 
 const log = logger.child({ module: "agent" });
-const model = (): string => getEnv().GEMINI_MODEL;
 const MAX_STEPS = 4; // tool rounds before the agent must answer (free-tier friendly)
 
 export interface ChatMessage {
@@ -198,6 +195,15 @@ export function isActionTool(name: string): boolean {
   return name in ACTION_TOOLS;
 }
 
+/** Every tool name the model is allowed to call (read + action). */
+const KNOWN_TOOLS = new Set(
+  DECLARATIONS.map((d) => d.name).filter((n): n is string => Boolean(n)),
+);
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
 async function findCompany(store: Store, name?: string) {
   if (!name) return undefined;
   const companies = await store.listCompanies();
@@ -276,11 +282,11 @@ export async function* runAgent(
 
   try {
     for (let step = 0; step < MAX_STEPS; step++) {
-      const res = await withRetry(
-        () =>
+      const res = await withModelFallback(
+        (m) =>
           runGemini(() =>
             geminiClient().models.generateContent({
-              model: model(),
+              model: m,
               contents,
               config: {
                 systemInstruction: SYSTEM,
@@ -289,13 +295,23 @@ export async function* runAgent(
               },
             }),
           ),
-        { label: "agent:step", shouldRetry: isTransient },
+        "agent:step",
       );
       const u = usageOf(res);
       tokensIn += u.tokensIn;
       tokensOut += u.tokensOut;
 
-      const calls = res.functionCalls ?? [];
+      // Validate tool-call shape against the declarations — Gemini can emit a
+      // malformed (no name) or hallucinated (unknown name) call. Drop those so a
+      // bad call never crashes the loop or invents an action.
+      const rawCalls = res.functionCalls ?? [];
+      const calls = rawCalls.filter((c): c is typeof c & { name: string } => {
+        if (!c.name || !KNOWN_TOOLS.has(c.name)) {
+          log.warn("agent: dropping unknown/malformed tool call", { name: c.name ?? null });
+          return false;
+        }
+        return true;
+      });
       if (calls.length === 0) {
         yield { type: "answer", text: (res.text ?? "").trim() || "I couldn't find enough to answer that." };
         return;
@@ -303,12 +319,12 @@ export async function* runAgent(
 
       // If the model wants to take a mutating action, don't execute it — surface
       // a proposal for the operator to confirm, and end the turn here.
-      const actionCalls = calls.filter((c) => isActionTool(c.name ?? ""));
+      const actionCalls = calls.filter((c) => isActionTool(c.name));
       if (actionCalls.length > 0) {
         const proposals: ActionProposal[] = actionCalls.map((c) => {
-          const args = (c.args ?? {}) as Record<string, unknown>;
-          const meta = ACTION_TOOLS[c.name ?? ""];
-          return { tool: c.name ?? "", args, summary: meta.summarize(args), executor: meta.executor };
+          const args = isPlainObject(c.args) ? c.args : {};
+          const meta = ACTION_TOOLS[c.name];
+          return { tool: c.name, args, summary: meta.summarize(args), executor: meta.executor };
         });
         yield { type: "proposal", proposals };
         return;
@@ -320,11 +336,11 @@ export async function* runAgent(
 
       const responseParts = [];
       for (const call of calls) {
-        const args = (call.args ?? {}) as Record<string, unknown>;
-        yield { type: "tool", name: call.name ?? "?", args };
-        const result = await executeTool(store, call.name ?? "", args);
+        const args = isPlainObject(call.args) ? call.args : {};
+        yield { type: "tool", name: call.name, args };
+        const result = await executeTool(store, call.name, args);
         responseParts.push({
-          functionResponse: { name: call.name ?? "", response: result },
+          functionResponse: { name: call.name, response: result },
         });
       }
       contents.push({ role: "user", parts: responseParts });

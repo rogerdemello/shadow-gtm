@@ -583,6 +583,8 @@ export function storeFor(ctx: StoreContext): Store {
         scan_id: event.scanId ?? null,
         company_id: event.companyId ?? null,
         prompt_version: event.promptVersion ?? null,
+        latency_ms: event.latencyMs ?? null,
+        status: event.status ?? "ok",
       };
       const { error } = await db.from("usage_events").insert(insert);
       // Best-effort: metering must never break a scan. Log and move on.

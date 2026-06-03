@@ -154,6 +154,9 @@ export interface ScanCompanyResult {
   signals: Signal[];
   changeSummary: string | null;
   error?: string;
+  /** Non-fatal extraction issue (e.g. the model returned unparseable output) —
+   *  the scan completed but produced no signals for a diagnosable reason. */
+  warning?: string;
 }
 
 /** A metered operation (Gemini extraction/retrieval, API request, …) for cost + quotas. */
@@ -166,6 +169,10 @@ export interface UsageEvent {
   companyId?: string | null;
   /** Prompt/schema version attributed to this event (extraction calls). */
   promptVersion?: string | null;
+  /** Wall-clock latency of the AI call in ms (for AI-ops diagnostics). */
+  latencyMs?: number | null;
+  /** Outcome of the op: "ok" | "error" | "empty" — powers /api/ai-ops health. */
+  status?: string;
 }
 
 /** An in-app alert surfaced in the dashboard (and source for email digests). */

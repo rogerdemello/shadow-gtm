@@ -2,11 +2,9 @@ import { Type } from "@google/genai";
 import { z } from "zod";
 import type { Company, DossierTask, Signal } from "./types";
 import type { SerpResult } from "./types";
-import { getEnv } from "./env";
-import { geminiClient, runGemini, friendlyGeminiError, usageOf, type GeminiUsage } from "./gemini";
+import { geminiClient, runGemini, friendlyGeminiError, usageOf, withModelFallback, type GeminiUsage } from "./gemini";
 import { extractSignals } from "./ai";
 import { searchWeb } from "./retrieval";
-import { withRetry, isTransient } from "./retry";
 import { logger } from "./logger";
 
 // ── Agentic deep-dive dossier ─────────────────────────────────────────────────
@@ -16,10 +14,10 @@ import { logger } from "./logger";
 //   3. SYNTHESIZE — Gemini writes a cited Markdown dossier from the findings
 // Streamed as events so the UI can narrate progress. Heavier than a scan (~7
 // Gemini calls), so it's an explicit on-demand action; the global limiter
-// (lib/gemini) keeps it under rate caps.
+// (lib/gemini) keeps it under rate caps. Every call falls back to
+// GEMINI_MODEL_FALLBACK on a model-level failure.
 
 const log = logger.child({ module: "dossier" });
-const model = (): string => getEnv().GEMINI_MODEL;
 
 // 3 keeps a deep dive to ~5 Gemini calls (plan + 3 searches + synthesis) — free-
 // tier friendly. Raise on a paid key for broader coverage.
@@ -70,11 +68,11 @@ export async function planDossier(
   onUsage?: (u: GeminiUsage) => void,
 ): Promise<DossierTask[]> {
   try {
-    const res = await withRetry(
-      () =>
+    const res = await withModelFallback(
+      (m) =>
         runGemini(() =>
           geminiClient().models.generateContent({
-            model: model(),
+            model: m,
             contents: `Plan a competitive-intelligence dossier on ${company.name} (${company.domain}). Choose the ${MAX_TASKS} highest-value research angles and a focused web-search query for each.`,
             config: {
               systemInstruction: PLAN_SYSTEM,
@@ -84,7 +82,7 @@ export async function planDossier(
             },
           }),
         ),
-      { label: "dossier:plan", shouldRetry: isTransient },
+      "dossier:plan",
     );
     onUsage?.(usageOf(res));
     const parsed = PlanZ.parse(JSON.parse(res.text ?? "{}"));
@@ -131,16 +129,16 @@ async function* synthesize(
   context: string,
   onUsage?: (u: GeminiUsage) => void,
 ): AsyncGenerator<string> {
-  const stream = await withRetry(
-    () =>
+  const stream = await withModelFallback(
+    (m) =>
       runGemini(() =>
         geminiClient().models.generateContentStream({
-          model: model(),
+          model: m,
           contents: `Competitor: ${company.name} (${company.domain})\n\nGrounded research findings:\n${context}\n\nWrite the dossier.`,
           config: { systemInstruction: DOSSIER_SYSTEM, maxOutputTokens: 6144 },
         }),
       ),
-    { label: "dossier:synthesis", shouldRetry: isTransient },
+    "dossier:synthesis",
   );
   for await (const chunk of stream) {
     const u = usageOf(chunk);

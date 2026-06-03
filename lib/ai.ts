@@ -4,10 +4,8 @@ import type { Company, PageType, SerpResult, Signal, SignalType } from "./types"
 import { id } from "./store";
 import { clip } from "./html";
 import { getEnv, geminiConfigured as envGeminiConfigured } from "./env";
-import { geminiClient, runGemini } from "./gemini";
+import { geminiClient, runGemini, withModelFallback } from "./gemini";
 import { logger } from "./logger";
-import { withRetry, isTransient } from "./retry";
-
 const log = logger.child({ module: "ai" });
 
 // ── Gemini integration ──────────────────────────────────────────────────────
@@ -15,11 +13,8 @@ const log = logger.child({ module: "ai" });
 // GTM signals (the extraction + reasoning layers folded into a single pass to
 // keep the live scan responsive). A second free-text call generates battlecards
 // on demand. System prompts are stable and supplied via systemInstruction.
-
-const MODEL = getEnv().GEMINI_MODEL;
-/** Optional secondary model; extractSignals falls back to it if the primary
- *  fails (transient errors / quota). Unset → no fallback. */
-const FALLBACK_MODEL = getEnv().GEMINI_MODEL_FALLBACK;
+// Every call routes through withModelFallback so a model-level outage/quota
+// failure degrades to GEMINI_MODEL_FALLBACK instead of failing the request.
 
 /** Bump when the extraction prompt or schema changes. Stamped on usage_events so
  *  prompt/model changes are attributable in metering and eval comparisons. */
@@ -189,6 +184,10 @@ function usageOf(response: {
 export interface ExtractionResult {
   signals: Signal[];
   usage: TokenUsage;
+  /** Set when extraction produced no signals due to a failure (empty model
+   *  output or unparseable JSON) rather than a genuine "nothing noteworthy".
+   *  Lets the scan surface a diagnosable warning instead of silent zero. */
+  warning?: string;
 }
 
 /** Extract + reason in one structured Gemini call. Returns persisted-shape
@@ -227,42 +226,23 @@ ${serpBlock}
 
 Return structured signals. Use the URLs above as sourceUrl values.`;
 
-  const extractCall = (model: string) =>
-    runGemini(() =>
-      geminiClient().models.generateContent({
-        model,
-        contents: userContent,
-        config: {
-          systemInstruction: ANALYST_SYSTEM,
-          responseMimeType: "application/json",
-          responseSchema: EXTRACTION_RESPONSE_SCHEMA,
-          maxOutputTokens: 8192,
-          ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
-        },
-      }),
-    );
-
-  let response;
-  try {
-    response = await withRetry(() => extractCall(MODEL), {
-      label: "gemini:extract",
-      shouldRetry: isTransient,
-    });
-  } catch (err) {
-    if (!FALLBACK_MODEL) throw err;
-    // Primary exhausted its retries — try the fallback model once (with its own
-    // retry budget) before giving up. Keeps extraction resilient to model-level
-    // outages/quota without masking a genuine bad request.
-    log.warn("extract: primary model failed, using fallback", {
-      model: MODEL,
-      fallback: FALLBACK_MODEL,
-      error: (err as Error).message,
-    });
-    response = await withRetry(() => extractCall(FALLBACK_MODEL), {
-      label: "gemini:extract:fallback",
-      shouldRetry: isTransient,
-    });
-  }
+  const response = await withModelFallback(
+    (model) =>
+      runGemini(() =>
+        geminiClient().models.generateContent({
+          model,
+          contents: userContent,
+          config: {
+            systemInstruction: ANALYST_SYSTEM,
+            responseMimeType: "application/json",
+            responseSchema: EXTRACTION_RESPONSE_SCHEMA,
+            maxOutputTokens: 8192,
+            ...(thinkingConfig() ? { thinkingConfig: thinkingConfig() } : {}),
+          },
+        }),
+      ),
+    "gemini:extract",
+  );
 
   const usage = usageOf(response);
   const raw = response.text;
@@ -271,7 +251,7 @@ Return structured signals. Use the URLs above as sourceUrl values.`;
       companyId: company.id,
       scanId,
     });
-    return { signals: [], usage };
+    return { signals: [], usage, warning: "The model returned an empty response (likely rate-limited or blocked)." };
   }
 
   let parsed: z.infer<typeof ExtractionSchema>;
@@ -285,7 +265,7 @@ Return structured signals. Use the URLs above as sourceUrl values.`;
       scanId,
       rawPreview: raw.slice(0, 500),
     });
-    return { signals: [], usage };
+    return { signals: [], usage, warning: "The model returned output that couldn't be parsed into signals." };
   }
 
   const now = new Date().toISOString();
@@ -331,11 +311,11 @@ export async function generateBattlecard(
   company: Company,
   signals: Signal[],
 ): Promise<string> {
-  const response = await withRetry(
-    () =>
+  const response = await withModelFallback(
+    (model) =>
       runGemini(() =>
         geminiClient().models.generateContent({
-          model: MODEL,
+          model,
           contents: `Competitor: ${company.name} (${company.domain})\n\nSignals:\n${signalDigest(signals)}\n\nWrite the battlecard.`,
           config: {
             systemInstruction: BATTLECARD_SYSTEM,
@@ -344,7 +324,7 @@ export async function generateBattlecard(
           },
         }),
       ),
-    { label: "gemini:battlecard", shouldRetry: isTransient },
+    "gemini:battlecard",
   );
 
   return (response.text || "").trim();
@@ -357,11 +337,11 @@ export async function* streamBattlecard(
   signals: Signal[],
   onUsage?: (u: TokenUsage) => void,
 ): AsyncGenerator<string> {
-  const stream = await withRetry(
-    () =>
+  const stream = await withModelFallback(
+    (model) =>
       runGemini(() =>
         geminiClient().models.generateContentStream({
-          model: MODEL,
+          model,
           contents: `Competitor: ${company.name} (${company.domain})\n\nSignals:\n${signalDigest(signals)}\n\nWrite the battlecard.`,
           config: {
             systemInstruction: BATTLECARD_SYSTEM,
@@ -370,7 +350,7 @@ export async function* streamBattlecard(
           },
         }),
       ),
-    { label: "gemini:battlecard-stream", shouldRetry: isTransient },
+    "gemini:battlecard-stream",
   );
 
   for await (const chunk of stream) {
@@ -400,11 +380,11 @@ export async function generateAttackPlan(
     ? `Target competitor: ${companyName}`
     : "Target: the overall competitive set";
 
-  const response = await withRetry(
-    () =>
+  const response = await withModelFallback(
+    (model) =>
       runGemini(() =>
         geminiClient().models.generateContent({
-          model: MODEL,
+          model,
           contents: `${target}\n\nOperator directive: "${directive}"\n\nLive intelligence signals:\n${signalDigest(
             signals,
           )}\n\nWrite the attack plan.`,
@@ -415,7 +395,7 @@ export async function generateAttackPlan(
           },
         }),
       ),
-    { label: "gemini:warroom", shouldRetry: isTransient },
+    "gemini:warroom",
   );
 
   return (response.text || "").trim();
@@ -432,11 +412,11 @@ export async function* streamAttackPlan(
     ? `Target competitor: ${companyName}`
     : "Target: the overall competitive set";
 
-  const stream = await withRetry(
-    () =>
+  const stream = await withModelFallback(
+    (model) =>
       runGemini(() =>
         geminiClient().models.generateContentStream({
-          model: MODEL,
+          model,
           contents: `${target}\n\nOperator directive: "${directive}"\n\nLive intelligence signals:\n${signalDigest(
             signals,
           )}\n\nWrite the attack plan.`,
@@ -447,7 +427,7 @@ export async function* streamAttackPlan(
           },
         }),
       ),
-    { label: "gemini:warroom-stream", shouldRetry: isTransient },
+    "gemini:warroom-stream",
   );
 
   for await (const chunk of stream) {

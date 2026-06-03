@@ -1,5 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { getEnv } from "./env";
+import { withRetry, isTransient } from "./retry";
+import { logger } from "./logger";
 
 // ── Shared Gemini client + concurrency control ────────────────────────────────
 // One place for the GoogleGenAI client (used by both retrieval and extraction)
@@ -48,6 +50,35 @@ export async function runGemini<T>(fn: () => Promise<T>): Promise<T> {
     return await fn();
   } finally {
     release();
+  }
+}
+
+const fallbackLog = logger.child({ module: "gemini" });
+
+/** Run a Gemini operation against the primary model with retry; on a permanent
+ *  failure (retries exhausted) fall back to GEMINI_MODEL_FALLBACK once, if set.
+ *  `run(model)` builds + issues the call (wrap the body in runGemini yourself for
+ *  streaming, or rely on it for unary). Used by every generator so model-level
+ *  quota/outage degrades gracefully instead of failing the request. */
+export async function withModelFallback<T>(
+  run: (model: string) => Promise<T>,
+  label: string,
+): Promise<T> {
+  const { GEMINI_MODEL: primary, GEMINI_MODEL_FALLBACK: fallback } = getEnv();
+  try {
+    return await withRetry(() => run(primary), { label, shouldRetry: isTransient });
+  } catch (err) {
+    if (!fallback || fallback === primary) throw err;
+    fallbackLog.warn("primary model failed; trying fallback", {
+      label,
+      primary,
+      fallback,
+      error: (err as Error).message,
+    });
+    return await withRetry(() => run(fallback), {
+      label: `${label}:fallback`,
+      shouldRetry: isTransient,
+    });
   }
 }
 

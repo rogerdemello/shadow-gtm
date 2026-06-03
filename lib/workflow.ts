@@ -163,7 +163,8 @@ export async function scanCompany(
       .join("\n\n") || null;
 
     // 3. Reason: turn it all into ranked, explained signals.
-    const { signals, usage } = await extractSignals({
+    const extractStart = Date.now();
+    const { signals, usage, warning } = await extractSignals({
       company,
       pages: pages.map((p) => ({
         pageType: p.pageType,
@@ -174,10 +175,12 @@ export async function scanCompany(
       changeSummary: combinedSummary,
       scanId,
     });
+    const extractLatency = Date.now() - extractStart;
 
     await store.replaceCompanySignals(company.id, signals);
 
-    // 3b. Meter the Gemini call (cost + Phase 7 quotas). Best-effort.
+    // 3b. Meter the Gemini call (cost + Phase 7 quotas + AI-ops). Best-effort.
+    //     status reflects extraction health so /api/ai-ops can spot failure runs.
     await store.recordUsage({
       kind: "gemini_extraction",
       tokensIn: usage.promptTokens,
@@ -185,7 +188,12 @@ export async function scanCompany(
       scanId,
       companyId: company.id,
       promptVersion: PROMPT_VERSION,
+      latencyMs: extractLatency,
+      status: warning ? "error" : "ok",
     });
+    if (warning) {
+      logger.warn("scan extraction warning", { company: company.name, scanId, warning });
+    }
 
     // 3c. Alert on signals crossing the org's opportunity threshold. Runs only
     //     when extraction ran (the cache-skip path returns earlier), so we don't
@@ -233,7 +241,7 @@ export async function scanCompany(
     };
     await store.saveEvidence(evidence);
 
-    return { ...base, signals, changeSummary: combinedSummary };
+    return { ...base, signals, changeSummary: combinedSummary, warning };
   } catch (err) {
     return { ...base, error: friendlyGeminiError(err) };
   }

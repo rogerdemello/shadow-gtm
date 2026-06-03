@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { storeOr401 } from "@/lib/store-context";
 import { runAgent, type ChatMessage } from "@/lib/agent";
+import { tokenBudgetOr402 } from "@/lib/budget";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,9 @@ export async function POST(req: Request) {
   const r = await storeOr401();
   if (r.res) return r.res;
   const store = r.store;
+
+  const over = await tokenBudgetOr402(store);
+  if (over) return over;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({

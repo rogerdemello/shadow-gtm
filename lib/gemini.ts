@@ -56,6 +56,22 @@ export function inFlight(): number {
   return active;
 }
 
+// ── Token accounting ──────────────────────────────────────────────────────────
+export interface GeminiUsage {
+  tokensIn: number;
+  tokensOut: number;
+}
+
+/** Prompt + output token counts from a Gemini response (or stream chunk). Streamed
+ *  chunks report cumulative totals, so taking the last non-zero value yields the
+ *  call total. Missing metadata → zeros. */
+export function usageOf(res: {
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+}): GeminiUsage {
+  const u = res?.usageMetadata;
+  return { tokensIn: u?.promptTokenCount ?? 0, tokensOut: u?.candidatesTokenCount ?? 0 };
+}
+
 // ── Error humanization ────────────────────────────────────────────────────────
 /** Turn a raw Gemini SDK error into a short, user-facing message. */
 export function friendlyGeminiError(err: unknown): string {

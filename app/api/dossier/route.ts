@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { storeOr401 } from "@/lib/store-context";
 import { runDossierStream, dossierToSignals } from "@/lib/dossier";
 import { dossierSignalsEnabled } from "@/lib/env";
+import { persistWithRetry } from "@/lib/retry";
+import { tokenBudgetOr402 } from "@/lib/budget";
 import { id as newId } from "@/lib/store";
 
 export const runtime = "nodejs";
@@ -41,6 +43,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Company not found" }, { status: 404 });
   }
 
+  // A deep dive is several Gemini calls — refuse before spending if the org has
+  // exhausted its monthly token budget.
+  const over = await tokenBudgetOr402(store);
+  if (over) return over;
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -58,18 +65,29 @@ export async function POST(req: Request) {
         for await (const ev of runDossierStream(company)) {
           send(ev);
           if (ev.type === "done") {
-            // Persist the dossier + meter the (heavy) operation. Best-effort.
+            // Persist the dossier with retry; surface a persist_failed event if
+            // the (expensive) generated content can't be saved.
+            await persistWithRetry(
+              () =>
+                store.saveDossier({
+                  id: newId(),
+                  companyId: company.id,
+                  companyName: company.name,
+                  markdown: ev.markdown,
+                  createdAt: new Date().toISOString(),
+                }),
+              (err) => send({ type: "persist_failed", error: err.message }),
+              "saveDossier",
+            );
+            // Metering is best-effort — never let it break the response.
             await store
-              .saveDossier({
-                id: newId(),
+              .recordUsage({
+                kind: "gemini_dossier",
                 companyId: company.id,
-                companyName: company.name,
-                markdown: ev.markdown,
-                createdAt: new Date().toISOString(),
+                units: 1,
+                tokensIn: ev.tokensIn,
+                tokensOut: ev.tokensOut,
               })
-              .catch(() => {});
-            await store
-              .recordUsage({ kind: "gemini_dossier", companyId: company.id, units: 1 })
               .catch(() => {});
             // Feed the dossier's findings back into the pipeline as signals
             // (opt-in — an extra Gemini call; off by default to save free quota).

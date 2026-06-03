@@ -2,6 +2,7 @@ import type { Store } from "./store.supabase";
 import { getEnv } from "./env";
 import { geminiClient, runGemini, friendlyGeminiError } from "./gemini";
 import { computeMomentum } from "./trends";
+import { usageOf } from "./gemini";
 import { withRetry, isTransient } from "./retry";
 
 // ── Market-narrative agent ────────────────────────────────────────────────────
@@ -19,7 +20,7 @@ Ground every point in the supplied momentum + signals. Be specific and executive
 
 export type NarrativeEvent =
   | { type: "delta"; text: string }
-  | { type: "done"; markdown: string }
+  | { type: "done"; markdown: string; tokensIn: number; tokensOut: number }
   | { type: "error"; error: string };
 
 /** Build the cross-competitor context block (pure-ish; reads the store). */
@@ -65,7 +66,10 @@ export async function* streamNarrative(store: Store): AsyncGenerator<NarrativeEv
         ),
       { label: "narrative", shouldRetry: isTransient },
     );
+    let usage = { tokensIn: 0, tokensOut: 0 };
     for await (const chunk of stream) {
+      const u = usageOf(chunk);
+      if (u.tokensIn || u.tokensOut) usage = u; // cumulative; last wins
       const text = chunk.text;
       if (text) {
         markdown += text;
@@ -77,7 +81,7 @@ export async function* streamNarrative(store: Store): AsyncGenerator<NarrativeEv
       yield { type: "error", error: "The memo came back empty — try again." };
       return;
     }
-    yield { type: "done", markdown: final };
+    yield { type: "done", markdown: final, tokensIn: usage.tokensIn, tokensOut: usage.tokensOut };
   } catch (err) {
     yield { type: "error", error: friendlyGeminiError(err) };
   }

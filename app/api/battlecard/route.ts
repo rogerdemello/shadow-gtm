@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { id as newId } from "@/lib/store";
 import { storeOr401 } from "@/lib/store-context";
 import { streamBattlecard } from "@/lib/ai";
+import { persistWithRetry } from "@/lib/retry";
+import { tokenBudgetOr402 } from "@/lib/budget";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,6 +44,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Company not found" }, { status: 404 });
   }
 
+  const over = await tokenBudgetOr402(store);
+  if (over) return over;
+
   const signals = (await store.listSignals()).filter((s) => s.companyId === companyId);
   const encoder = new TextEncoder();
 
@@ -58,8 +63,11 @@ export async function POST(req: Request) {
       };
 
       let buffer = "";
+      let usage = { promptTokens: 0, outputTokens: 0, totalTokens: 0 };
       try {
-        for await (const chunk of streamBattlecard(company, signals)) {
+        for await (const chunk of streamBattlecard(company, signals, (u) => {
+          usage = u;
+        })) {
           if (closed) break;
           buffer += chunk;
           send({ type: "delta", text: chunk });
@@ -72,7 +80,20 @@ export async function POST(req: Request) {
             markdown: buffer.trim(),
             createdAt: new Date().toISOString(),
           };
-          await store.saveBattlecard(card);
+          await persistWithRetry(
+            () => store.saveBattlecard(card),
+            (err) => send({ type: "persist_failed", error: err.message }),
+            "saveBattlecard",
+          );
+          await store
+            .recordUsage({
+              kind: "gemini_battlecard",
+              companyId,
+              units: 1,
+              tokensIn: usage.promptTokens,
+              tokensOut: usage.outputTokens,
+            })
+            .catch(() => {});
           send({ type: "done", battlecard: card });
         }
       } catch (err) {

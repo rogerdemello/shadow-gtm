@@ -32,6 +32,22 @@ export async function POST(req: Request) {
     );
   }
 
+  // Idempotency: claim this event id. Stripe retries the same event on any
+  // non-2xx/timeout; a duplicate insert (23505) means we already handled it, so
+  // ack with 200 and do nothing — never double-write the subscription.
+  const db = getServiceClient();
+  const { error: claimErr } = await db
+    .from("webhook_events")
+    .insert({ stripe_event_id: event.id, type: event.type });
+  if (claimErr) {
+    if (claimErr.code === "23505") {
+      log.info("duplicate webhook ignored", { id: event.id, type: event.type });
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    log.error("webhook dedupe insert failed", new Error(claimErr.message), { id: event.id });
+    return NextResponse.json({ error: "dedupe error" }, { status: 500 });
+  }
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {
@@ -52,6 +68,9 @@ export async function POST(req: Request) {
       }
     }
   } catch (err) {
+    // Processing failed — release the idempotency claim so Stripe's retry can
+    // re-process this event instead of being swallowed as a duplicate.
+    await db.from("webhook_events").delete().eq("stripe_event_id", event.id);
     log.error("webhook handler failed", err as Error, { type: event.type });
     return NextResponse.json({ error: "handler error" }, { status: 500 });
   }

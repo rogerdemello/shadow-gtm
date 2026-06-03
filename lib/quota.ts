@@ -32,6 +32,22 @@ export function scanQuotaStatus(plan: Plan, scansThisMonth: number): QuotaStatus
   };
 }
 
+/** Status of an org's monthly Gemini token usage against its plan budget. Counts
+ *  every AI op (extraction, dossier, narrative, battlecard, agent) — the guard
+ *  that stops one expensive operation from draining an account. */
+export function tokenQuotaStatus(plan: Plan, tokensThisMonth: number): QuotaStatus {
+  const limit = plan.limits.monthlyTokens;
+  if (limit === null) {
+    return { used: tokensThisMonth, limit: null, remaining: null, over: false };
+  }
+  return {
+    used: tokensThisMonth,
+    limit,
+    remaining: Math.max(0, limit - tokensThisMonth),
+    over: tokensThisMonth >= limit,
+  };
+}
+
 /** True when adding one more company would exceed the plan's company cap. */
 export function companyLimitReached(plan: Plan, currentCompanies: number): boolean {
   const max = plan.limits.maxCompanies;

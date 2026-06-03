@@ -63,6 +63,26 @@ export async function withRetry<T>(
   throw lastErr;
 }
 
+/** Persist a generated artifact (dossier/narrative/battlecard) with one retry on
+ *  transient failure. On permanent failure, invoke onFail (e.g. to emit a
+ *  `persist_failed` SSE event) instead of silently swallowing it — generated AI
+ *  content is expensive and the user must know it wasn't saved. Returns whether
+ *  the write succeeded. */
+export async function persistWithRetry(
+  fn: () => Promise<void>,
+  onFail: (err: Error) => void,
+  label = "persist",
+): Promise<boolean> {
+  try {
+    await withRetry(fn, { attempts: 2, label, shouldRetry: isTransient });
+    return true;
+  } catch (err) {
+    log.error(`${label} failed permanently`, err as Error);
+    onFail(err as Error);
+    return false;
+  }
+}
+
 /** Heuristic: retry network/timeout/429/5xx, not 4xx client errors. Use as the
  *  default shouldRetry for HTTP-ish failures. */
 export function isTransient(err: unknown): boolean {

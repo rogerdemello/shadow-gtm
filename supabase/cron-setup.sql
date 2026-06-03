@@ -15,10 +15,15 @@
 -- 1. Enable the extensions (Supabase: also toggle-able under Database → Extensions).
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
+create extension if not exists pgcrypto;  -- for hmac() request signing
 
 -- 2. Schedule the worker ping every minute. Replace the placeholders:
 --    <WORKER_URL>     → https://your-app.vercel.app
---    <WORKER_SECRET>  → the same value set in the app env
+--    <WORKER_SECRET>  → the same value set in the app env (≥ 24 chars)
+--
+-- The request is SIGNED: it sends a current timestamp and an HMAC-SHA256 of
+-- `${timestamp}.${body}` keyed by WORKER_SECRET. The worker rejects signatures
+-- older than 5 minutes, so a captured request can't be replayed. (lib/worker-auth.ts)
 --
 -- (Unschedule first if re-running: select cron.unschedule('shadow-gtm-worker');)
 select cron.schedule(
@@ -29,7 +34,11 @@ select cron.schedule(
     url     := '<WORKER_URL>/api/worker/process',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'x-worker-secret', '<WORKER_SECRET>'
+      'x-worker-timestamp', extract(epoch from now())::bigint::text,
+      'x-worker-signature', encode(
+        hmac(extract(epoch from now())::bigint::text || '.{}', '<WORKER_SECRET>', 'sha256'),
+        'hex'
+      )
     ),
     body    := '{}'::jsonb
   );

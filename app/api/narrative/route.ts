@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { storeOr401 } from "@/lib/store-context";
 import { streamNarrative } from "@/lib/narrative";
+import { persistWithRetry } from "@/lib/retry";
+import { tokenBudgetOr402 } from "@/lib/budget";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +21,9 @@ export async function POST() {
   if (r.res) return r.res;
   const store = r.store;
 
+  const over = await tokenBudgetOr402(store);
+  if (over) return over;
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -35,8 +40,19 @@ export async function POST() {
         for await (const ev of streamNarrative(store)) {
           send(ev);
           if (ev.type === "done") {
-            await store.saveNarrative(ev.markdown).catch(() => {});
-            await store.recordUsage({ kind: "gemini_narrative", units: 1 }).catch(() => {});
+            await persistWithRetry(
+              () => store.saveNarrative(ev.markdown),
+              (err) => send({ type: "persist_failed", error: err.message }),
+              "saveNarrative",
+            );
+            await store
+              .recordUsage({
+                kind: "gemini_narrative",
+                units: 1,
+                tokensIn: ev.tokensIn,
+                tokensOut: ev.tokensOut,
+              })
+              .catch(() => {});
           }
         }
       } catch (err) {

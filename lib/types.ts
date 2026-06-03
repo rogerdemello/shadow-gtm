@@ -246,6 +246,20 @@ export interface UsageSummary {
   byKind: Record<string, number>;
 }
 
+/** Cadence for a background re-scan schedule. */
+export type ScheduleCadence = "hourly" | "daily" | "weekly";
+
+/** A per-company (or whole-org when companyId is null) recurring scan schedule. */
+export interface Schedule {
+  id: string;
+  companyId: string | null;
+  cadence: ScheduleCadence;
+  enabled: boolean;
+  lastRunAt: string | null;
+  nextRunAt: string;
+  createdAt: string;
+}
+
 /** A scan job that exhausted its retries — surfaced for visibility + manual retry. */
 export interface FailedJob {
   id: string;
@@ -270,6 +284,8 @@ export interface Plan {
     monthlyScans: number | null;
     maxCompanies: number | null;
     maxMembers: number | null;
+    /** Monthly Gemini token budget (prompt + output), across every AI op. null = unlimited. */
+    monthlyTokens: number | null;
   };
 }
 

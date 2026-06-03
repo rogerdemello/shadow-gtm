@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { storeOr401 } from "@/lib/store-context";
 import { streamAttackPlan } from "@/lib/ai";
+import { tokenBudgetOr402 } from "@/lib/budget";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +25,9 @@ export async function POST(req: Request) {
   const r = await storeOr401();
   if (r.res) return r.res;
   const store = r.store;
+
+  const over = await tokenBudgetOr402(store);
+  if (over) return over;
 
   const allSignals = await store.listSignals();
   let companyName: string | null = null;
@@ -53,13 +57,25 @@ export async function POST(req: Request) {
       };
 
       let buffer = "";
+      let usage = { promptTokens: 0, outputTokens: 0, totalTokens: 0 };
       try {
-        for await (const chunk of streamAttackPlan(directive, target, signals)) {
+        for await (const chunk of streamAttackPlan(directive, target, signals, (u) => {
+          usage = u;
+        })) {
           if (closed) break;
           buffer += chunk;
           send({ type: "delta", text: chunk });
         }
         if (!closed) {
+          await store
+            .recordUsage({
+              kind: "gemini_warroom",
+              companyId: body.companyId ?? null,
+              units: 1,
+              tokensIn: usage.promptTokens,
+              tokensOut: usage.outputTokens,
+            })
+            .catch(() => {});
           send({
             type: "done",
             plan: {

@@ -350,10 +350,12 @@ export async function generateBattlecard(
   return (response.text || "").trim();
 }
 
-/** Streaming version — yields markdown deltas as Gemini generates the card. */
+/** Streaming version — yields markdown deltas as Gemini generates the card.
+ *  Reports token usage via onUsage (cumulative on chunks; last wins) for metering. */
 export async function* streamBattlecard(
   company: Company,
   signals: Signal[],
+  onUsage?: (u: TokenUsage) => void,
 ): AsyncGenerator<string> {
   const stream = await withRetry(
     () =>
@@ -372,6 +374,8 @@ export async function* streamBattlecard(
   );
 
   for await (const chunk of stream) {
+    const u = usageOf(chunk);
+    if (u.totalTokens) onUsage?.(u);
     const text = chunk.text;
     if (text) yield text;
   }
@@ -422,6 +426,7 @@ export async function* streamAttackPlan(
   directive: string,
   companyName: string | null,
   signals: Signal[],
+  onUsage?: (u: TokenUsage) => void,
 ): AsyncGenerator<string> {
   const target = companyName
     ? `Target competitor: ${companyName}`
@@ -446,6 +451,8 @@ export async function* streamAttackPlan(
   );
 
   for await (const chunk of stream) {
+    const u = usageOf(chunk);
+    if (u.totalTokens) onUsage?.(u);
     const text = chunk.text;
     if (text) yield text;
   }

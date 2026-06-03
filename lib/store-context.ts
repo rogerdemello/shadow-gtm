@@ -117,6 +117,13 @@ const jsonStore: Store = {
     throw new Error("API keys require a configured workspace.");
   },
   revokeApiKey: async () => {},
+  // Scheduling requires a configured workspace (the worker + queue).
+  listSchedules: async () => [],
+  createSchedule: async () => {
+    throw new Error("Scheduling requires a configured workspace.");
+  },
+  updateSchedule: async () => {},
+  deleteSchedule: async () => {},
   // No background queue in the demo.
   listFailedJobs: async () => [],
   retryJob: async () => {},

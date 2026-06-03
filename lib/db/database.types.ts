@@ -295,6 +295,17 @@ export interface Database {
           updated_at?: Timestamp;
         }
       >;
+      webhook_events: Table<
+        {
+          stripe_event_id: string; org_id: string | null; type: string;
+          processed_at: Timestamp;
+        },
+        {
+          stripe_event_id: string; org_id?: string | null; type: string;
+          processed_at?: Timestamp;
+        },
+        Record<string, never>
+      >;
     };
     Functions: {
       is_org_member: { Args: { target_org: string }; Returns: boolean };

@@ -4,6 +4,7 @@ import {
   memberLimitReached,
   scanQuotaStatus,
   startOfMonthIso,
+  tokenQuotaStatus,
 } from "../../lib/quota";
 import { CHECKOUT_PLANS, PLANS, planFor } from "../../lib/plans";
 
@@ -35,6 +36,25 @@ describe("scanQuotaStatus", () => {
   });
   it("treats null (enterprise) as unlimited", () => {
     const s = scanQuotaStatus(PLANS.enterprise, 999999);
+    expect(s.over).toBe(false);
+    expect(s.limit).toBeNull();
+    expect(s.remaining).toBeNull();
+  });
+});
+
+describe("tokenQuotaStatus", () => {
+  it("reports remaining under the budget", () => {
+    const s = tokenQuotaStatus(PLANS.free, 500_000); // free = 2,000,000
+    expect(s.over).toBe(false);
+    expect(s.remaining).toBe(1_500_000);
+  });
+  it("flags over at/above the budget", () => {
+    expect(tokenQuotaStatus(PLANS.free, 2_000_000).over).toBe(true);
+    expect(tokenQuotaStatus(PLANS.free, 2_500_000).over).toBe(true);
+    expect(tokenQuotaStatus(PLANS.free, 2_500_000).remaining).toBe(0);
+  });
+  it("treats null (enterprise) as unlimited", () => {
+    const s = tokenQuotaStatus(PLANS.enterprise, 10_000_000_000);
     expect(s.over).toBe(false);
     expect(s.limit).toBeNull();
     expect(s.remaining).toBeNull();

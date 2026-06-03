@@ -11,28 +11,28 @@ export const PLANS: Record<PlanId, Plan> = {
     name: "Free",
     priceMonthly: 0,
     blurb: "Kick the tires on a handful of competitors.",
-    limits: { monthlyScans: 20, maxCompanies: 3, maxMembers: 1 },
+    limits: { monthlyScans: 20, maxCompanies: 3, maxMembers: 1, monthlyTokens: 2_000_000 },
   },
   startup: {
     id: "startup",
     name: "Startup",
     priceMonthly: 99,
     blurb: "For a founding GTM team tracking the core competitive set.",
-    limits: { monthlyScans: 500, maxCompanies: 15, maxMembers: 5 },
+    limits: { monthlyScans: 500, maxCompanies: 15, maxMembers: 5, monthlyTokens: 50_000_000 },
   },
   growth: {
     id: "growth",
     name: "Growth",
     priceMonthly: 499,
     blurb: "Scale monitoring across the full market with the whole team.",
-    limits: { monthlyScans: 5000, maxCompanies: 75, maxMembers: 25 },
+    limits: { monthlyScans: 5000, maxCompanies: 75, maxMembers: 25, monthlyTokens: 500_000_000 },
   },
   enterprise: {
     id: "enterprise",
     name: "Enterprise",
     priceMonthly: -1, // custom / contact sales
     blurb: "Unlimited coverage, SSO, and a data-residency story.",
-    limits: { monthlyScans: null, maxCompanies: null, maxMembers: null },
+    limits: { monthlyScans: null, maxCompanies: null, maxMembers: null, monthlyTokens: null },
   },
 };
 

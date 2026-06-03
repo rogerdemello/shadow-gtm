@@ -15,6 +15,8 @@ import {
   sendDueDigests,
 } from "@/lib/jobs";
 import { logger } from "@/lib/logger";
+import { verifyWorkerRequest } from "@/lib/worker-auth";
+import { tokenBudgetStatus } from "@/lib/budget";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,10 +37,9 @@ export async function POST(req: Request) {
   if (!secret) {
     return NextResponse.json({ error: "Worker not configured" }, { status: 503 });
   }
-  const provided =
-    req.headers.get("x-worker-secret") ||
-    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (provided !== secret) {
+  // Read the raw body once (needed to verify a signed request) and reuse it.
+  const rawBody = await req.text();
+  if (!verifyWorkerRequest(req, rawBody, secret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -67,10 +68,27 @@ export async function POST(req: Request) {
 
       // Autonomous deep-dive job (enqueued by the triage agent).
       if (job.kind === "dossier") {
+        // Respect the org's monthly token budget for autonomous spend — skip
+        // (don't retry) when exhausted rather than silently burning quota.
+        const budget = await tokenBudgetStatus(store);
+        if (budget.over) {
+          log.warn("skipping autonomous dossier — token budget exhausted", {
+            org: job.org_id,
+            company: company.name,
+          });
+          await completeJob(db, job.id, null);
+          done++;
+          continue;
+        }
         let md = "";
+        let tokensIn = 0;
+        let tokensOut = 0;
         for await (const ev of runDossierStream(company)) {
-          if (ev.type === "done") md = ev.markdown;
-          else if (ev.type === "error") throw new Error(ev.error);
+          if (ev.type === "done") {
+            md = ev.markdown;
+            tokensIn = ev.tokensIn;
+            tokensOut = ev.tokensOut;
+          } else if (ev.type === "error") throw new Error(ev.error);
         }
         if (md) {
           await store.saveDossier({
@@ -80,7 +98,13 @@ export async function POST(req: Request) {
             markdown: md,
             createdAt: new Date().toISOString(),
           });
-          await store.recordUsage({ kind: "gemini_dossier", companyId: company.id, units: 1 });
+          await store.recordUsage({
+            kind: "gemini_dossier",
+            companyId: company.id,
+            units: 1,
+            tokensIn,
+            tokensOut,
+          });
           // Feed the autonomous dossier's findings back into the pipeline (opt-in).
           if (dossierSignalsEnabled()) {
             const sigs = await dossierToSignals(company, md).catch(() => []);

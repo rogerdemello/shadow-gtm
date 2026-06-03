@@ -57,7 +57,9 @@ export async function PATCH(req: Request) {
     patch.autonomyLevel = body.autonomyLevel;
   }
 
-  const r = await contextOrError();
+  // Cost-bearing settings (autonomyLevel drives autonomous deep dives) — restrict
+  // mutation to owners/admins. GET stays member-level.
+  const r = await contextOrError(["owner", "admin"]);
   if (r.res) return r.res;
   await r.ctx.store.updateAlertRule(patch);
   return NextResponse.json({ ok: true });

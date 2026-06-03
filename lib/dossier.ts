@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Company, DossierTask, Signal } from "./types";
 import type { SerpResult } from "./types";
 import { getEnv } from "./env";
-import { geminiClient, runGemini, friendlyGeminiError } from "./gemini";
+import { geminiClient, runGemini, friendlyGeminiError, usageOf, type GeminiUsage } from "./gemini";
 import { extractSignals } from "./ai";
 import { searchWeb } from "./retrieval";
 import { withRetry, isTransient } from "./retry";
@@ -63,8 +63,12 @@ const PLAN_SCHEMA = {
 const PLAN_SYSTEM =
   "You are a competitive-intelligence lead planning a research dossier. Pick the highest-value angles to investigate for the given company and write one focused web-search query per angle. Favor angles a revenue team cares about: funding, product, pricing, customers, sentiment, leadership, hiring.";
 
-/** Step 1 — plan the research angles (falls back to defaults on any failure). */
-export async function planDossier(company: Company): Promise<DossierTask[]> {
+/** Step 1 — plan the research angles (falls back to defaults on any failure).
+ *  Reports the call's token usage via onUsage (for metering) when provided. */
+export async function planDossier(
+  company: Company,
+  onUsage?: (u: GeminiUsage) => void,
+): Promise<DossierTask[]> {
   try {
     const res = await withRetry(
       () =>
@@ -82,6 +86,7 @@ export async function planDossier(company: Company): Promise<DossierTask[]> {
         ),
       { label: "dossier:plan", shouldRetry: isTransient },
     );
+    onUsage?.(usageOf(res));
     const parsed = PlanZ.parse(JSON.parse(res.text ?? "{}"));
     const tasks = parsed.tasks
       .filter((t) => t.dimension.trim() && t.query.trim())
@@ -119,8 +124,13 @@ const DOSSIER_SYSTEM = `You are a senior competitive-intelligence analyst. Write
 - **Watch list** — the few things worth monitoring next.
 Ground every claim in the findings; if the findings are thin on an angle, say so plainly rather than inventing. Be concise and specific. No preamble — start with the Overview heading.`;
 
-/** Step 3 — synthesize the dossier, streamed as Markdown deltas. */
-async function* synthesize(company: Company, context: string): AsyncGenerator<string> {
+/** Step 3 — synthesize the dossier, streamed as Markdown deltas. Reports token
+ *  usage via onUsage (cumulative on stream chunks; last wins) when provided. */
+async function* synthesize(
+  company: Company,
+  context: string,
+  onUsage?: (u: GeminiUsage) => void,
+): AsyncGenerator<string> {
   const stream = await withRetry(
     () =>
       runGemini(() =>
@@ -133,6 +143,8 @@ async function* synthesize(company: Company, context: string): AsyncGenerator<st
     { label: "dossier:synthesis", shouldRetry: isTransient },
   );
   for await (const chunk of stream) {
+    const u = usageOf(chunk);
+    if (u.tokensIn || u.tokensOut) onUsage?.(u);
     const text = chunk.text;
     if (text) yield text;
   }
@@ -143,7 +155,7 @@ export type DossierEvent =
   | { type: "gather"; dimension: string; found: number }
   | { type: "synthesis" }
   | { type: "delta"; text: string }
-  | { type: "done"; markdown: string }
+  | { type: "done"; markdown: string; tokensIn: number; tokensOut: number }
   | { type: "error"; error: string };
 
 /** Turn a finished dossier into structured signals that feed the pipeline.
@@ -168,8 +180,13 @@ export async function dossierToSignals(company: Company, markdown: string): Prom
 /** Run the full agent, yielding progress events then the final dossier. */
 export async function* runDossierStream(company: Company): AsyncGenerator<DossierEvent> {
   let markdown = "";
+  const usage = { tokensIn: 0, tokensOut: 0 };
+  const addUsage = (u: GeminiUsage) => {
+    usage.tokensIn += u.tokensIn;
+    usage.tokensOut += u.tokensOut;
+  };
   try {
-    const tasks = await planDossier(company);
+    const tasks = await planDossier(company, addUsage);
     yield { type: "plan", tasks };
 
     const gathered: Gathered[] = [];
@@ -179,18 +196,24 @@ export async function* runDossierStream(company: Company): AsyncGenerator<Dossie
       yield { type: "gather", dimension: task.dimension, found: results.length };
     }
 
+    // Synthesis streams cumulative usage; track the max so the accumulated total
+    // counts plan + synthesis without double-counting the streamed deltas.
+    let synthUsage: GeminiUsage = { tokensIn: 0, tokensOut: 0 };
     yield { type: "synthesis" };
-    for await (const delta of synthesize(company, buildContext(gathered))) {
+    for await (const delta of synthesize(company, buildContext(gathered), (u) => {
+      synthUsage = u;
+    })) {
       markdown += delta;
       yield { type: "delta", text: delta };
     }
+    addUsage(synthUsage);
 
     const final = markdown.trim();
     if (!final) {
       yield { type: "error", error: "The dossier came back empty — try again." };
       return;
     }
-    yield { type: "done", markdown: final };
+    yield { type: "done", markdown: final, tokensIn: usage.tokensIn, tokensOut: usage.tokensOut };
   } catch (err) {
     yield { type: "error", error: friendlyGeminiError(err) };
   }

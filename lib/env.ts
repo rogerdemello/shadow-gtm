@@ -60,8 +60,12 @@ const EnvSchema = z.object({
   /** "1" surfaces the "Sign in with SSO" path (set once an SSO provider exists). */
   NEXT_PUBLIC_SSO_ENABLED: z.enum(["0", "1"]).optional(),
 
-  /** Shared secret the cron trigger uses to authorize the worker route. */
-  WORKER_SECRET: z.string().min(1).optional(),
+  /** Shared secret the cron trigger uses to authorize the worker route. Must be
+   *  long enough to resist brute force (it gates the cross-org background worker). */
+  WORKER_SECRET: z
+    .string()
+    .min(24, "WORKER_SECRET must be at least 24 characters")
+    .optional(),
 
   // ── Email (Resend) ─────────────────────────────────────────────────────────
   /** Resend API key. When absent, email is logged-skipped (no-op). */

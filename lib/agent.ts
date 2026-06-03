@@ -2,7 +2,7 @@ import { Type } from "@google/genai";
 import type { Content, FunctionDeclaration } from "@google/genai";
 import type { Store } from "./store.supabase";
 import { getEnv } from "./env";
-import { geminiClient, runGemini, friendlyGeminiError } from "./gemini";
+import { geminiClient, runGemini, friendlyGeminiError, usageOf } from "./gemini";
 import { searchWeb } from "./retrieval";
 import { computeMomentum } from "./trends";
 import { withRetry, isTransient } from "./retry";
@@ -271,6 +271,9 @@ export async function* runAgent(
     parts: [{ text: m.content }],
   }));
 
+  let tokensIn = 0;
+  let tokensOut = 0;
+
   try {
     for (let step = 0; step < MAX_STEPS; step++) {
       const res = await withRetry(
@@ -288,6 +291,9 @@ export async function* runAgent(
           ),
         { label: "agent:step", shouldRetry: isTransient },
       );
+      const u = usageOf(res);
+      tokensIn += u.tokensIn;
+      tokensOut += u.tokensOut;
 
       const calls = res.functionCalls ?? [];
       if (calls.length === 0) {
@@ -331,5 +337,13 @@ export async function* runAgent(
   } catch (err) {
     log.warn("agent loop failed", { error: (err as Error).message });
     yield { type: "error", error: friendlyGeminiError(err) };
+  } finally {
+    // Meter the conversation's token spend (best-effort) so it counts toward the
+    // org's monthly budget like every other AI op.
+    if (tokensIn || tokensOut) {
+      await store
+        .recordUsage({ kind: "gemini_agent", units: 1, tokensIn, tokensOut })
+        .catch(() => {});
+    }
   }
 }

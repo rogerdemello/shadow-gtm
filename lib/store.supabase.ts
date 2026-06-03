@@ -20,6 +20,8 @@ import type {
   Integration,
   Scan,
   ScanEvidence,
+  Schedule,
+  ScheduleCadence,
   SerpEvidence,
   Signal,
   Snapshot,
@@ -45,6 +47,11 @@ type Db = SupabaseClient<Database>;
 type Tables = Database["public"]["Tables"];
 
 const PG_UNIQUE_VIOLATION = "23505";
+
+// Hard cap on list queries so a large org can't pull an unbounded result set
+// (and blow up /api/state). Well above any realistic single-org count; paged
+// variants below serve true pagination.
+const MAX_ROWS = 1000;
 
 export interface StoreContext {
   db: Db;
@@ -174,6 +181,23 @@ export interface Store {
   }): Promise<ApiKey>;
   revokeApiKey(id: string): Promise<void>;
 
+  // ── Scheduling (autonomous monitoring) ─────────────────────────────────────
+  /** The org's background-scan schedules, newest first. */
+  listSchedules(): Promise<Schedule[]>;
+  /** Create a schedule (companyId null = whole org). Runs immediately, then by cadence. */
+  createSchedule(input: {
+    companyId?: string | null;
+    cadence: ScheduleCadence;
+    enabled?: boolean;
+  }): Promise<Schedule>;
+  /** Patch a schedule's cadence/enabled flag. */
+  updateSchedule(
+    id: string,
+    patch: { cadence?: ScheduleCadence; enabled?: boolean },
+  ): Promise<void>;
+  /** Delete a schedule. */
+  deleteSchedule(id: string): Promise<void>;
+
   // ── Reliability (Phase 13) ─────────────────────────────────────────────────
   /** Scan jobs that exhausted retries (dead-letter), newest first. */
   listFailedJobs(): Promise<FailedJob[]>;
@@ -203,7 +227,8 @@ export function storeFor(ctx: StoreContext): Store {
         .from("companies")
         .select("*")
         .eq("org_id", orgId)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: true })
+        .limit(MAX_ROWS);
       fail("listCompanies", error);
       return (data ?? []).map(rowToCompany);
     },
@@ -291,7 +316,8 @@ export function storeFor(ctx: StoreContext): Store {
         .select("*")
         .eq("org_id", orgId)
         .eq("is_current", true)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(MAX_ROWS);
       fail("listSignals", error);
       return (data ?? []).map(rowToSignal);
     },
@@ -311,7 +337,8 @@ export function storeFor(ctx: StoreContext): Store {
         .select("*")
         .eq("org_id", orgId)
         .eq("company_id", companyId)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: true })
+        .limit(MAX_ROWS);
       fail("listSignalHistory", error);
       return (data ?? []).map(rowToSignal);
     },
@@ -913,6 +940,54 @@ export function storeFor(ctx: StoreContext): Store {
       fail("revokeApiKey", error);
     },
 
+    // ── Scheduling ──────────────────────────────────────────────────────────
+    async listSchedules() {
+      const { data, error } = await db
+        .from("schedules")
+        .select("*")
+        .eq("org_id", orgId)
+        .order("created_at", { ascending: false });
+      fail("listSchedules", error);
+      return (data ?? []).map(rowToSchedule);
+    },
+
+    async createSchedule(input) {
+      const { data, error } = await db
+        .from("schedules")
+        .insert({
+          org_id: orgId,
+          company_id: input.companyId ?? null,
+          cadence: input.cadence,
+          enabled: input.enabled ?? true,
+          next_run_at: new Date().toISOString(),
+        })
+        .select("*")
+        .single();
+      fail("createSchedule", error);
+      return rowToSchedule(data!);
+    },
+
+    async updateSchedule(id, patch) {
+      const row: Tables["schedules"]["Update"] = {};
+      if (patch.cadence !== undefined) row.cadence = patch.cadence;
+      if (patch.enabled !== undefined) row.enabled = patch.enabled;
+      const { error } = await db
+        .from("schedules")
+        .update(row)
+        .eq("org_id", orgId)
+        .eq("id", id);
+      fail("updateSchedule", error);
+    },
+
+    async deleteSchedule(id) {
+      const { error } = await db
+        .from("schedules")
+        .delete()
+        .eq("org_id", orgId)
+        .eq("id", id);
+      fail("deleteSchedule", error);
+    },
+
     // ── Reliability: dead-letter jobs ──────────────────────────────────────
     async listFailedJobs() {
       const { data, error } = await db
@@ -1163,6 +1238,18 @@ export function rowToWebhook(r: Tables["webhook_endpoints"]["Row"]): WebhookEndp
     enabled: r.enabled,
     lastStatus: r.last_status,
     lastAttemptAt: r.last_attempt_at,
+    createdAt: r.created_at,
+  };
+}
+
+export function rowToSchedule(r: Tables["schedules"]["Row"]): Schedule {
+  return {
+    id: r.id,
+    companyId: r.company_id,
+    cadence: r.cadence,
+    enabled: r.enabled,
+    lastRunAt: r.last_run_at,
+    nextRunAt: r.next_run_at,
     createdAt: r.created_at,
   };
 }

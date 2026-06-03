@@ -30,6 +30,8 @@ const jsonStore: Store = {
   addCompany: json.addCompany,
   removeCompany: json.removeCompany,
   getCompany: json.getCompany,
+  // Editing a competitor isn't supported in the keyless demo (read-mostly).
+  updateCompany: async () => undefined,
   latestSnapshot: json.latestSnapshot,
   saveSnapshot: json.saveSnapshot,
   listSignals: json.listSignals,
@@ -56,6 +58,7 @@ const jsonStore: Store = {
     throw new Error("Saving conversations requires a configured workspace.");
   },
   updateConversation: async () => {},
+  deleteConversation: async () => {},
   // Market narrative isn't persisted in the keyless demo (generated on demand).
   getNarrative: async () => undefined,
   saveNarrative: async () => {},
@@ -107,6 +110,7 @@ const jsonStore: Store = {
   upsertIntegration: async () => {},
   deleteIntegration: async () => {},
   listWebhooks: async () => [],
+  getWebhook: async () => undefined,
   listWebhookTargets: async () => [],
   createWebhook: async () => {
     throw new Error("Webhooks require a configured workspace.");

@@ -70,6 +70,11 @@ export interface Store {
   }): Promise<Company>;
   removeCompany(companyId: string): Promise<void>;
   getCompany(companyId: string): Promise<Company | undefined>;
+  /** Patch a company's editable fields (name/domain/pricingUrl), org-scoped. */
+  updateCompany(
+    companyId: string,
+    patch: { name?: string; domain?: string; pricingUrl?: string },
+  ): Promise<Company | undefined>;
 
   latestSnapshot(
     companyId: string,
@@ -106,6 +111,7 @@ export interface Store {
   getConversation(id: string): Promise<Conversation | undefined>;
   createConversation(title: string, messages: ConversationMessage[]): Promise<Conversation>;
   updateConversation(id: string, messages: ConversationMessage[]): Promise<void>;
+  deleteConversation(id: string): Promise<void>;
 
   // ── Market narrative ───────────────────────────────────────────────────────
   getNarrative(): Promise<MarketNarrative | undefined>;
@@ -168,6 +174,8 @@ export interface Store {
   deleteIntegration(provider: string): Promise<void>;
   /** Webhook endpoints without secrets (for the settings UI). */
   listWebhooks(): Promise<WebhookEndpoint[]>;
+  /** A single webhook endpoint (without its secret), org-scoped. */
+  getWebhook(id: string): Promise<WebhookEndpoint | undefined>;
   /** Enabled endpoints WITH their signing secret (for dispatch only). */
   listWebhookTargets(): Promise<
     { id: string; url: string; secret: string }[]
@@ -275,6 +283,27 @@ export function storeFor(ctx: StoreContext): Store {
         .eq("id", companyId)
         .maybeSingle();
       fail("getCompany", error);
+      return data ? rowToCompany(data) : undefined;
+    },
+
+    async updateCompany(companyId, patch) {
+      const update: Tables["companies"]["Update"] = {};
+      if (patch.name !== undefined) update.name = patch.name.trim();
+      if (patch.domain !== undefined) update.domain = normalizeDomain(patch.domain);
+      if (patch.pricingUrl !== undefined) update.pricing_url = patch.pricingUrl.trim();
+      const { data, error } = await db
+        .from("companies")
+        .update(update)
+        .eq("org_id", orgId)
+        .eq("id", companyId)
+        .select("*")
+        .maybeSingle();
+      if (error) {
+        if (error.code === PG_UNIQUE_VIOLATION) {
+          throw new DuplicateCompanyError(update.domain ?? "");
+        }
+        throw new Error(`store.updateCompany failed: ${error.message}`);
+      }
       return data ? rowToCompany(data) : undefined;
     },
 
@@ -553,6 +582,15 @@ export function storeFor(ctx: StoreContext): Store {
         .eq("org_id", orgId)
         .eq("id", id);
       fail("updateConversation", error);
+    },
+
+    async deleteConversation(id) {
+      const { error } = await db
+        .from("conversations")
+        .delete()
+        .eq("org_id", orgId)
+        .eq("id", id);
+      fail("deleteConversation", error);
     },
 
     async getNarrative() {
@@ -908,6 +946,17 @@ export function storeFor(ctx: StoreContext): Store {
         .order("created_at", { ascending: true });
       fail("listWebhooks", error);
       return (data ?? []).map(rowToWebhook);
+    },
+
+    async getWebhook(id) {
+      const { data, error } = await db
+        .from("webhook_endpoints")
+        .select("*")
+        .eq("org_id", orgId)
+        .eq("id", id)
+        .maybeSingle();
+      fail("getWebhook", error);
+      return data ? rowToWebhook(data) : undefined;
     },
 
     async listWebhookTargets() {

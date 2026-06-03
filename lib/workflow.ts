@@ -46,6 +46,15 @@ function homepageUrlFor(company: Company): string {
   return `https://${company.domain}/`;
 }
 
+// Re-extract at least this often even if monitored pages are byte-identical, so
+// signals don't go stale and slow-moving competitors still get periodic refresh.
+const FORCE_REFRESH_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Order-independent signature of a SERP result set (by link) for change-detection. */
+function serpSignature(serp: { link: string }[]): string {
+  return [...new Set(serp.map((s) => s.link))].sort().join("|");
+}
+
 interface FetchedPage {
   pageType: PageType;
   url: string;
@@ -140,7 +149,15 @@ export async function scanCompany(
         (s) => s.companyId === company.id,
       );
       if (existing.length > 0) {
-        return { ...base, signals: existing, changeSummary: null };
+        // Pages are byte-identical, but still re-extract when the live SERP moved
+        // (news/funding/sentiment shifts that pages don't reflect) or the cached
+        // signals are stale — otherwise reuse them and skip the Gemini cost.
+        const lastEv = await store.getEvidence(company.id);
+        const serpChanged = serpSignature(serp) !== serpSignature(lastEv?.serp ?? []);
+        const ageMs = lastEv ? Date.now() - new Date(lastEv.createdAt).getTime() : Infinity;
+        if (!serpChanged && ageMs < FORCE_REFRESH_MS) {
+          return { ...base, signals: existing, changeSummary: null };
+        }
       }
     }
 

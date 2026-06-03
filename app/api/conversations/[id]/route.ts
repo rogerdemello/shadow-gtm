@@ -30,11 +30,34 @@ export async function PUT(
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  if (!Array.isArray(body.messages)) {
-    return NextResponse.json({ error: "messages required" }, { status: 400 });
+  if (
+    !Array.isArray(body.messages) ||
+    !body.messages.every(
+      (m) =>
+        m &&
+        (m.role === "user" || m.role === "assistant") &&
+        typeof m.content === "string",
+    )
+  ) {
+    return NextResponse.json(
+      { error: "messages must be an array of { role: user|assistant, content: string }" },
+      { status: 400 },
+    );
   }
   const r = await storeOr401();
   if (r.res) return r.res;
   await r.store.updateConversation(id, body.messages);
+  return NextResponse.json({ ok: true });
+}
+
+// Delete a conversation.
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const r = await storeOr401();
+  if (r.res) return r.res;
+  await r.store.deleteConversation(id);
   return NextResponse.json({ ok: true });
 }

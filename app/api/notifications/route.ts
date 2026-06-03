@@ -19,8 +19,16 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  if (!Array.isArray(body.ids) || body.ids.length === 0) {
-    return NextResponse.json({ error: "ids[] required" }, { status: 400 });
+  if (
+    !Array.isArray(body.ids) ||
+    body.ids.length === 0 ||
+    body.ids.length > 500 ||
+    !body.ids.every((x) => typeof x === "string" && x.length > 0 && x.length <= 100)
+  ) {
+    return NextResponse.json(
+      { error: "ids must be a non-empty array (max 500) of id strings" },
+      { status: 400 },
+    );
   }
   const r = await storeOr401();
   if (r.res) return r.res;

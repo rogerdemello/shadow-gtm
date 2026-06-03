@@ -291,6 +291,7 @@ export default function Dashboard() {
         | { type: "delta"; text: string }
         | { type: "done" }
         | { type: "error"; error: string }
+        | { type: "persist_failed"; error: string }
       >(res, ac.signal)) {
         if (ac.signal.aborted) return;
         if (ev.type === "delta") {
@@ -298,6 +299,8 @@ export default function Dashboard() {
           setCard({ company, markdown: acc, loading: true });
         } else if (ev.type === "error") {
           throw new Error(ev.error);
+        } else if (ev.type === "persist_failed") {
+          setError(`Battlecard generated but couldn't be saved: ${ev.error}. Use ↻ to retry.`);
         } else if (ev.type === "done") {
           setCard({ company, markdown: acc, loading: false });
         }
@@ -455,8 +458,14 @@ export default function Dashboard() {
         | { type: "delta"; text: string }
         | { type: "done"; markdown: string }
         | { type: "error"; error: string }
+        | { type: "persist_failed"; error: string }
       >(res, ac.signal)) {
         if (ac.signal.aborted) return;
+        if (ev.type === "persist_failed") {
+          steps.push("⚠ Generated but couldn't be saved — use ↻ rerun to retry.");
+          setDossier({ company, markdown: acc, steps: [...steps], loading: false });
+          continue;
+        }
         if (ev.type === "plan") {
           steps.push(`Planned ${ev.tasks.length} research angles`);
           setDossier({ company, markdown: "", steps: [...steps], loading: true });
@@ -566,6 +575,7 @@ export default function Dashboard() {
         | { type: "delta"; text: string }
         | { type: "done"; markdown: string }
         | { type: "error"; error: string }
+        | { type: "persist_failed"; error: string }
       >(res, ac.signal)) {
         if (ac.signal.aborted) return;
         if (ev.type === "delta") {
@@ -573,6 +583,8 @@ export default function Dashboard() {
           setNarrative({ markdown: acc, loading: true });
         } else if (ev.type === "error") {
           throw new Error(ev.error);
+        } else if (ev.type === "persist_failed") {
+          setError(`Memo generated but couldn't be saved: ${ev.error}. Regenerate to retry.`);
         } else if (ev.type === "done") {
           setNarrative({ markdown: ev.markdown, loading: false });
         }

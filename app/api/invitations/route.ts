@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { contextOrError } from "@/lib/store-context";
+import { idempotencyKey, replayIdempotent, rememberIdempotent } from "@/lib/idempotency";
 import type { MemberRole } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -42,6 +43,10 @@ export async function POST(req: Request) {
   const r = await contextOrError(["owner", "admin"]);
   if (r.res) return r.res;
 
+  const idem = idempotencyKey(req);
+  const replay = replayIdempotent("invitations", idem);
+  if (replay) return replay;
+
   const token = randomBytes(24).toString("hex");
   const invitation = await r.ctx.store.createInvitation({
     email,
@@ -49,5 +54,6 @@ export async function POST(req: Request) {
     token,
     invitedBy: r.ctx.userId,
   });
+  rememberIdempotent("invitations", idem, 201, { invitation });
   return NextResponse.json({ invitation }, { status: 201 });
 }

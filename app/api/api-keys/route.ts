@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { contextOrError } from "@/lib/store-context";
 import { generateApiKey } from "@/lib/apikey";
+import { idempotencyKey, replayIdempotent, rememberIdempotent } from "@/lib/idempotency";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,10 @@ export async function POST(req: Request) {
   const r = await contextOrError(["owner", "admin"]);
   if (r.res) return r.res;
 
+  const idem = idempotencyKey(req);
+  const replay = replayIdempotent("api-keys", idem);
+  if (replay) return replay;
+
   const { plaintext, hash, prefix } = generateApiKey();
   const apiKey = await r.ctx.store.createApiKey({
     name,
@@ -32,5 +37,6 @@ export async function POST(req: Request) {
     prefix,
     createdBy: r.ctx.userId,
   });
+  rememberIdempotent("api-keys", idem, 201, { apiKey, key: plaintext });
   return NextResponse.json({ apiKey, key: plaintext }, { status: 201 });
 }

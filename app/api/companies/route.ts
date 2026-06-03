@@ -3,6 +3,7 @@ import { DuplicateCompanyError } from "@/lib/store";
 import { storeOr401 } from "@/lib/store-context";
 import { planFor } from "@/lib/plans";
 import { companyLimitReached } from "@/lib/quota";
+import { idempotencyKey, replayIdempotent, rememberIdempotent } from "@/lib/idempotency";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +35,10 @@ export async function POST(req: Request) {
     );
   }
 
+  const idem = idempotencyKey(req);
+  const replay = replayIdempotent("companies", idem);
+  if (replay) return replay;
+
   const r = await storeOr401();
   if (r.res) return r.res;
 
@@ -58,6 +63,7 @@ export async function POST(req: Request) {
       domain,
       pricingUrl: body.pricingUrl,
     });
+    rememberIdempotent("companies", idem, 201, { company });
     return NextResponse.json({ company }, { status: 201 });
   } catch (err) {
     if (err instanceof DuplicateCompanyError) {

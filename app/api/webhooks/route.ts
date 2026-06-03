@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { contextOrError } from "@/lib/store-context";
+import { idempotencyKey, replayIdempotent, rememberIdempotent } from "@/lib/idempotency";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,8 +30,13 @@ export async function POST(req: Request) {
   const r = await contextOrError(["owner", "admin"]);
   if (r.res) return r.res;
 
+  const idem = idempotencyKey(req);
+  const replay = replayIdempotent("webhooks", idem);
+  if (replay) return replay;
+
   const secret = `whsec_${randomBytes(24).toString("hex")}`;
   const webhook = await r.ctx.store.createWebhook({ url, secret });
   // Return the secret once (it's stored, but we surface it here for setup).
+  rememberIdempotent("webhooks", idem, 201, { webhook, secret });
   return NextResponse.json({ webhook, secret }, { status: 201 });
 }

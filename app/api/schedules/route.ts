@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { contextOrError } from "@/lib/store-context";
+import { idempotencyKey, replayIdempotent, rememberIdempotent } from "@/lib/idempotency";
 import type { ScheduleCadence } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -46,10 +47,15 @@ export async function POST(req: Request) {
     }
   }
 
+  const idem = idempotencyKey(req);
+  const replay = replayIdempotent("schedules", idem);
+  if (replay) return replay;
+
   const schedule = await store.createSchedule({
     companyId: body.companyId ?? null,
     cadence,
     enabled: body.enabled ?? true,
   });
+  rememberIdempotent("schedules", idem, 201, { schedule });
   return NextResponse.json({ schedule }, { status: 201 });
 }

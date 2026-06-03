@@ -65,6 +65,8 @@ export interface Signal {
   quote?: string;
   /** Workflow status — defaults to "active" when unset (e.g. fresh from a scan). */
   status?: SignalStatus;
+  /** Operator quality rating: 1 = useful, -1 = noise, 0 = unrated. */
+  feedback?: number;
   createdAt: string;
 }
 

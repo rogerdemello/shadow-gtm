@@ -175,6 +175,26 @@ export default function Dashboard() {
     [loadState],
   );
 
+  const setSignalFeedback = useCallback(
+    async (signalId: string, feedback: number) => {
+      // Optimistic thumbs up/down; persist, re-sync on failure.
+      setSignals((prev) =>
+        prev.map((s) => (s.id === signalId ? { ...s, feedback } : s)),
+      );
+      try {
+        const res = await fetch(`/api/signals/${signalId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ feedback }),
+        });
+        if (!res.ok) await loadState();
+      } catch {
+        await loadState();
+      }
+    },
+    [loadState],
+  );
+
   const scanEsRef = useRef<EventSource | null>(null);
   const runScan = useCallback(() => {
     setError(null);
@@ -761,6 +781,7 @@ export default function Dashboard() {
                 scanningName={scanningName}
                 onEvidence={setEvidenceSignal}
                 onSetStatus={setSignalStatus}
+                onFeedback={setSignalFeedback}
               />
             </ErrorBoundary>
           </div>

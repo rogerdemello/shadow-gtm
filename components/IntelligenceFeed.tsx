@@ -43,11 +43,14 @@ export default function IntelligenceFeed({
   scanningName,
   onEvidence,
   onSetStatus,
+  onFeedback,
 }: {
   signals: Signal[];
   scanningName: string | null;
   onEvidence: (signal: Signal) => void;
   onSetStatus?: (signalId: string, status: SignalStatus) => void;
+  /** Rate a signal's usefulness: 1 (useful), -1 (noise), 0 (clear). */
+  onFeedback?: (signalId: string, feedback: number) => void;
 }) {
   const [active, setActive] = useState<Set<SignalType>>(new Set());
   const [showDismissed, setShowDismissed] = useState(false);
@@ -238,8 +241,42 @@ export default function IntelligenceFeed({
                   ↗ {s.sourceUrl}
                 </a>
               )}
+              {onFeedback && (
+                <span className={`flex items-center gap-1 ${onSetStatus ? "ml-auto" : "ml-auto"}`}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFeedback(s.id, s.feedback === 1 ? 0 : 1);
+                    }}
+                    title="Useful signal"
+                    aria-pressed={s.feedback === 1}
+                    className={`rounded border px-1.5 py-0.5 font-mono text-[10px] transition ${
+                      s.feedback === 1
+                        ? "border-accent/60 bg-accent/10 text-accent"
+                        : "border-ink-500 text-slate-500 opacity-0 hover:text-accent group-hover:opacity-100"
+                    }`}
+                  >
+                    👍
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFeedback(s.id, s.feedback === -1 ? 0 : -1);
+                    }}
+                    title="Noise — not useful"
+                    aria-pressed={s.feedback === -1}
+                    className={`rounded border px-1.5 py-0.5 font-mono text-[10px] transition ${
+                      s.feedback === -1
+                        ? "border-signal-high/60 bg-signal-high/10 text-signal-high"
+                        : "border-ink-500 text-slate-500 opacity-0 hover:text-signal-high group-hover:opacity-100"
+                    }`}
+                  >
+                    👎
+                  </button>
+                </span>
+              )}
               {onSetStatus && (
-                <span className="ml-auto flex items-center gap-1">
+                <span className={`flex items-center gap-1 ${onFeedback ? "" : "ml-auto"}`}>
                   {statusOf(s) !== "handled" && (
                     <StatusBtn
                       label="✓ handled"

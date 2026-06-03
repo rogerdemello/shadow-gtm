@@ -38,6 +38,7 @@ const jsonStore: Store = {
   replaceCompanySignals: json.replaceCompanySignals,
   addSignals: json.addSignals,
   setSignalStatus: json.setSignalStatus,
+  setSignalFeedback: async () => {},
   // The JSON demo doesn't retain history; approximate with current signals.
   listSignalHistory: async (companyId: string) =>
     (await json.listSignals()).filter((s) => s.companyId === companyId),

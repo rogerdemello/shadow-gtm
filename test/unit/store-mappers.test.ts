@@ -77,6 +77,7 @@ describe("rowToSignal", () => {
     quote: "Starter is now $79/mo",
     is_current: true,
     status: "active" as const,
+    feedback: 0,
     created_at: "2026-05-30T00:00:00.000Z",
   };
 
@@ -96,6 +97,7 @@ describe("rowToSignal", () => {
       sourceUrl: "https://acme.com/pricing",
       quote: "Starter is now $79/mo",
       status: "active",
+      feedback: 0,
       createdAt: "2026-05-30T00:00:00.000Z",
     });
   });

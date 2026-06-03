@@ -91,6 +91,8 @@ export interface Store {
   listSignalHistory(companyId: string): Promise<Signal[]>;
   /** Set a signal's workflow status (active/handled/dismissed). */
   setSignalStatus(signalId: string, status: Signal["status"]): Promise<void>;
+  /** Rate a signal's usefulness: 1 (useful), -1 (noise), or 0 (clear). */
+  setSignalFeedback(signalId: string, feedback: number): Promise<void>;
   /** All retained snapshots for a company, newest first (audit trail). */
   listSnapshots(companyId: string): Promise<Snapshot[]>;
 
@@ -361,6 +363,16 @@ export function storeFor(ctx: StoreContext): Store {
         .eq("org_id", orgId)
         .eq("id", signalId);
       fail("setSignalStatus", error);
+    },
+
+    async setSignalFeedback(signalId, feedback) {
+      const v = feedback > 0 ? 1 : feedback < 0 ? -1 : 0;
+      const { error } = await db
+        .from("signals")
+        .update({ feedback: v })
+        .eq("org_id", orgId)
+        .eq("id", signalId);
+      fail("setSignalFeedback", error);
     },
 
     async listSignalHistory(companyId) {
@@ -1261,6 +1273,7 @@ export function rowToSignal(r: Tables["signals"]["Row"]): Signal {
     sourceUrl: r.source_url,
     quote: r.quote ?? undefined,
     status: r.status,
+    feedback: r.feedback ?? 0,
     createdAt: r.created_at,
   };
 }

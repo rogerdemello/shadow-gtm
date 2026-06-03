@@ -89,16 +89,16 @@ export interface Database {
           scan_id: string | null; type: SignalTypeEnum; description: string; impact: ImpactEnum;
           confidence: number; opportunity_score: number; reasoning: string;
           recommended_action: string; source_url: string; quote: string | null;
-          is_current: boolean; status: SignalStatusEnum; created_at: Timestamp;
+          is_current: boolean; status: SignalStatusEnum; feedback: number; created_at: Timestamp;
         },
         {
           id?: string; org_id: string; company_id: string; company_name: string;
           scan_id?: string | null; type: SignalTypeEnum; description: string; impact: ImpactEnum;
           confidence: number; opportunity_score: number; reasoning: string;
           recommended_action: string; source_url: string; quote?: string | null;
-          is_current?: boolean; status?: SignalStatusEnum; created_at?: Timestamp;
+          is_current?: boolean; status?: SignalStatusEnum; feedback?: number; created_at?: Timestamp;
         },
-        { is_current?: boolean; status?: SignalStatusEnum }
+        { is_current?: boolean; status?: SignalStatusEnum; feedback?: number }
       >;
       scan_evidence: Table<
         {

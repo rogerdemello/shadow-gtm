@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { contextOrError } from "@/lib/store-context";
 import { billingConfigured } from "@/lib/env";
 import { CHECKOUT_PLANS, PLANS, planFor } from "@/lib/plans";
-import { SCAN_USAGE_KIND, scanQuotaStatus, startOfMonthIso } from "@/lib/quota";
+import {
+  SCAN_USAGE_KIND,
+  scanQuotaStatus,
+  startOfMonthIso,
+  tokenQuotaStatus,
+} from "@/lib/quota";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,11 +26,13 @@ export async function GET() {
   ]);
   const plan = planFor(sub.plan);
   const quota = scanQuotaStatus(plan, usage.byKind[SCAN_USAGE_KIND] ?? 0);
+  const tokenQuota = tokenQuotaStatus(plan, usage.tokensIn + usage.tokensOut);
 
   return NextResponse.json({
     subscription: sub,
     plan,
     quota,
+    tokenQuota,
     companies: companies.length,
     plans: PLANS,
     checkoutPlans: CHECKOUT_PLANS,

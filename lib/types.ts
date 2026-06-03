@@ -243,6 +243,16 @@ export interface AlertRule {
   autonomyLevel: AutonomyLevel;
 }
 
+/** Per-kind AI operation health over a window (cost + reliability + latency). */
+export interface AiOpStat {
+  kind: string;
+  count: number;
+  errors: number;
+  tokensIn: number;
+  tokensOut: number;
+  avgLatencyMs: number | null;
+}
+
 /** Aggregated usage over a window, for the Usage tab + quota math. */
 export interface UsageSummary {
   since: string;

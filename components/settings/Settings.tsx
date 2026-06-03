@@ -533,10 +533,17 @@ function InviteForm({
 
 // ── Billing ───────────────────────────────────────────────────────────────
 
+interface QuotaShape {
+  used: number;
+  limit: number | null;
+  remaining: number | null;
+  over: boolean;
+}
 interface BillingData {
   subscription: Subscription;
   plan: Plan;
-  quota: { used: number; limit: number | null; remaining: number | null; over: boolean };
+  quota: QuotaShape;
+  tokenQuota: QuotaShape;
   companies: number;
   plans: Record<PlanId, Plan>;
   checkoutPlans: PlanId[];
@@ -576,9 +583,13 @@ function BillingTab({ role }: { role: MemberRole }) {
 
   if (!data) return <Panel>{err ? <Notice kind="error">{err}</Notice> : "Loading…"}</Panel>;
 
-  const { plan, quota, subscription } = data;
+  const { plan, quota, tokenQuota, subscription } = data;
   const pct =
     quota.limit === null ? 0 : Math.min(100, Math.round((quota.used / quota.limit) * 100));
+  const tokenPct =
+    tokenQuota.limit === null
+      ? 0
+      : Math.min(100, Math.round((tokenQuota.used / tokenQuota.limit) * 100));
 
   return (
     <div className="space-y-4">
@@ -626,6 +637,29 @@ function BillingTab({ role }: { role: MemberRole }) {
               style={{ width: `${quota.limit === null ? 4 : pct}%` }}
             />
           </div>
+        </div>
+
+        {/* AI token budget bar */}
+        <div className="mt-4">
+          <div className="mb-1 flex justify-between font-mono text-[11px] text-slate-400">
+            <span>AI tokens this month</span>
+            <span className={tokenQuota.over ? "text-signal-high" : ""}>
+              {tokenQuota.used.toLocaleString()} /{" "}
+              {tokenQuota.limit === null ? "∞" : tokenQuota.limit.toLocaleString()}
+            </span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-ink-900">
+            <div
+              className={`h-full ${tokenQuota.over ? "bg-signal-high" : "bg-accent"}`}
+              style={{ width: `${tokenQuota.limit === null ? 4 : tokenPct}%` }}
+            />
+          </div>
+          {tokenQuota.over && (
+            <p className="mt-1 text-[11px] text-signal-high">
+              Token budget exhausted — deep dives, memos, and the analyst are paused until next
+              month or an upgrade.
+            </p>
+          )}
         </div>
 
         <div className="mt-3 font-mono text-[11px] text-slate-500">
@@ -1391,8 +1425,72 @@ function UsageTab({ role }: { role: MemberRole }) {
         </>
       )}
     </Panel>
+    <AiOpsPanel days={days} />
     <JobsPanel role={role} />
     </div>
+  );
+}
+
+interface AiOpRow {
+  kind: string;
+  count: number;
+  errors: number;
+  tokensIn: number;
+  tokensOut: number;
+  avgLatencyMs: number | null;
+}
+
+function AiOpsPanel({ days }: { days: number }) {
+  const [ops, setOps] = useState<AiOpRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    setLoaded(false);
+    fetch(`/api/ai-ops?days=${days}`)
+      .then(jsonOrThrow)
+      .then((d) => setOps((d.ops as AiOpRow[]) ?? []))
+      .catch(() => setOps([]))
+      .finally(() => setLoaded(true));
+  }, [days]);
+
+  return (
+    <Panel>
+      <h2 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-slate-500">
+        AI operations
+      </h2>
+      {!loaded ? (
+        <p className="text-xs text-slate-600">Loading…</p>
+      ) : ops.length === 0 ? (
+        <p className="text-xs text-slate-600">No AI activity in this window.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left font-mono text-[11px]">
+            <thead>
+              <tr className="text-slate-500">
+                <th className="py-1 pr-3 font-normal uppercase tracking-wider">Operation</th>
+                <th className="py-1 pr-3 font-normal uppercase tracking-wider">Calls</th>
+                <th className="py-1 pr-3 font-normal uppercase tracking-wider">Errors</th>
+                <th className="py-1 pr-3 font-normal uppercase tracking-wider">Tokens</th>
+                <th className="py-1 font-normal uppercase tracking-wider">Avg ms</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ops.map((o) => (
+                <tr key={o.kind} className="border-t border-ink-500/30 text-slate-300">
+                  <td className="py-1 pr-3">{o.kind}</td>
+                  <td className="py-1 pr-3">{o.count}</td>
+                  <td className={`py-1 pr-3 ${o.errors > 0 ? "text-signal-high" : "text-slate-500"}`}>
+                    {o.errors}
+                  </td>
+                  <td className="py-1 pr-3">{(o.tokensIn + o.tokensOut).toLocaleString()}</td>
+                  <td className="py-1">{o.avgLatencyMs ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
   );
 }
 

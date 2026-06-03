@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./db/database.types";
 import type {
+  AiOpStat,
   AlertRule,
   Battlecard,
   Company,
@@ -142,6 +143,8 @@ export interface Store {
   updateAlertRule(patch: Partial<AlertRule>): Promise<void>;
   /** Aggregate metered usage since the given ISO timestamp. */
   getUsageSummary(sinceIso: string): Promise<UsageSummary>;
+  /** Per-kind AI-op health (count/errors/tokens/avg latency) since a timestamp. */
+  getAiOps(sinceIso: string): Promise<AiOpStat[]>;
 
   // ── Billing (Phase 10) ─────────────────────────────────────────────────────
   /** The org's subscription (defaults to the free plan when no row exists). */
@@ -797,6 +800,44 @@ export function storeFor(ctx: StoreContext): Store {
         byKind[r.kind] = (byKind[r.kind] ?? 0) + 1;
       }
       return { since: sinceIso, tokensIn, tokensOut, units, events: rows.length, byKind };
+    },
+
+    async getAiOps(sinceIso) {
+      const { data, error } = await db
+        .from("usage_events")
+        .select("kind, tokens_in, tokens_out, latency_ms, status")
+        .eq("org_id", orgId)
+        .gte("created_at", sinceIso)
+        .limit(MAX_ROWS);
+      fail("getAiOps", error);
+      const agg = new Map<
+        string,
+        { count: number; errors: number; tokensIn: number; tokensOut: number; latSum: number; latN: number }
+      >();
+      for (const r of data ?? []) {
+        const a =
+          agg.get(r.kind) ??
+          { count: 0, errors: 0, tokensIn: 0, tokensOut: 0, latSum: 0, latN: 0 };
+        a.count += 1;
+        if (r.status && r.status !== "ok") a.errors += 1;
+        a.tokensIn += r.tokens_in ?? 0;
+        a.tokensOut += r.tokens_out ?? 0;
+        if (r.latency_ms != null) {
+          a.latSum += r.latency_ms;
+          a.latN += 1;
+        }
+        agg.set(r.kind, a);
+      }
+      return [...agg.entries()]
+        .map(([kind, a]) => ({
+          kind,
+          count: a.count,
+          errors: a.errors,
+          tokensIn: a.tokensIn,
+          tokensOut: a.tokensOut,
+          avgLatencyMs: a.latN ? Math.round(a.latSum / a.latN) : null,
+        }))
+        .sort((x, y) => y.count - x.count);
     },
 
     // ── Billing ────────────────────────────────────────────────────────────

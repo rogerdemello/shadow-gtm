@@ -93,6 +93,7 @@ const jsonStore: Store = {
     events: 0,
     byKind: {},
   }),
+  getAiOps: async () => [],
   // The keyless demo has no billing — always the free plan, writes are no-ops.
   getSubscription: async () => ({
     plan: "free" as const,

@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { supabaseConfigured } from "./env";
 import { getServiceClient } from "./db/service";
 import { storeFor, type Store } from "./store.supabase";
+import { apiRateLimit } from "./ratelimit";
+import { planFor } from "./plans";
 
 // ── Public-API keys ────────────────────────────────────────────────────────
 // Keys look like "sk_live_<48 hex>". Only a SHA-256 hash is stored; the prefix
@@ -51,10 +53,16 @@ export async function apiKeyAuth(
     return { error: NextResponse.json({ error: "Invalid API key" }, { status: 401 }) };
   }
 
+  const store = storeFor({ db, orgId: data.org_id, userId: null });
+
+  // Per-key, plan-based rate limit (429 + Retry-After) before doing any work.
+  const sub = await store.getSubscription();
+  const limited = apiRateLimit(data.id, planFor(sub.plan).id);
+  if (limited) return { error: limited };
+
   // Touch last_used_at (best-effort; don't block the request).
   void db.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", data.id);
 
-  const store = storeFor({ db, orgId: data.org_id, userId: null });
   await store.recordUsage({ kind: "api_request", units: 1 });
   return { store, orgId: data.org_id };
 }

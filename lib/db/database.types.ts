@@ -153,12 +153,14 @@ export interface Database {
         {
           id: string; org_id: string; kind: string; tokens_in: number;
           tokens_out: number; units: number; scan_id: string | null;
-          company_id: string | null; prompt_version: string | null; created_at: Timestamp;
+          company_id: string | null; prompt_version: string | null;
+          latency_ms: number | null; status: string; created_at: Timestamp;
         },
         {
           id?: string; org_id: string; kind: string; tokens_in?: number;
           tokens_out?: number; units?: number; scan_id?: string | null;
-          company_id?: string | null; prompt_version?: string | null; created_at?: Timestamp;
+          company_id?: string | null; prompt_version?: string | null;
+          latency_ms?: number | null; status?: string; created_at?: Timestamp;
         },
         Record<string, never>
       >;
@@ -182,18 +184,21 @@ export interface Database {
         {
           id: string; org_id: string; company_id: string; scan_id: string | null;
           status: JobStatusEnum; kind: string; run_at: Timestamp; attempts: number;
-          max_attempts: number; error: string | null; started_at: Timestamp | null;
-          finished_at: Timestamp | null; created_at: Timestamp;
+          max_attempts: number; error: string | null; error_code: string | null;
+          retry_count: number; last_retry_at: Timestamp | null;
+          started_at: Timestamp | null; finished_at: Timestamp | null; created_at: Timestamp;
         },
         {
           id?: string; org_id: string; company_id: string; scan_id?: string | null;
           status?: JobStatusEnum; kind?: string; run_at?: Timestamp; attempts?: number;
-          max_attempts?: number; error?: string | null; started_at?: Timestamp | null;
-          finished_at?: Timestamp | null; created_at?: Timestamp;
+          max_attempts?: number; error?: string | null; error_code?: string | null;
+          retry_count?: number; last_retry_at?: Timestamp | null;
+          started_at?: Timestamp | null; finished_at?: Timestamp | null; created_at?: Timestamp;
         },
         {
           status?: JobStatusEnum; scan_id?: string | null; attempts?: number;
-          error?: string | null; run_at?: Timestamp; started_at?: Timestamp | null;
+          error?: string | null; error_code?: string | null; retry_count?: number;
+          last_retry_at?: Timestamp | null; run_at?: Timestamp; started_at?: Timestamp | null;
           finished_at?: Timestamp | null;
         }
       >;

@@ -266,6 +266,10 @@ export interface FailedJob {
   companyId: string;
   attempts: number;
   error: string | null;
+  /** Stable failure category (rate_limit | timeout | upstream | parse | …). */
+  errorCode: string | null;
+  /** How many times an operator has manually re-queued this job. */
+  retryCount: number;
   finishedAt: string | null;
   createdAt: string;
 }

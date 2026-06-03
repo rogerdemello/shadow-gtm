@@ -992,7 +992,7 @@ export function storeFor(ctx: StoreContext): Store {
     async listFailedJobs() {
       const { data, error } = await db
         .from("scan_jobs")
-        .select("id, company_id, attempts, error, finished_at, created_at")
+        .select("id, company_id, attempts, error, error_code, retry_count, finished_at, created_at")
         .eq("org_id", orgId)
         .eq("status", "failed")
         .order("created_at", { ascending: false })
@@ -1003,18 +1003,30 @@ export function storeFor(ctx: StoreContext): Store {
         companyId: r.company_id,
         attempts: r.attempts,
         error: r.error,
+        errorCode: r.error_code,
+        retryCount: r.retry_count,
         finishedAt: r.finished_at,
         createdAt: r.created_at,
       }));
     },
 
     async retryJob(id) {
+      // Track manual-retry history so a chronically-failing job is visible.
+      const { data: existing } = await db
+        .from("scan_jobs")
+        .select("retry_count")
+        .eq("org_id", orgId)
+        .eq("id", id)
+        .maybeSingle();
       const { error } = await db
         .from("scan_jobs")
         .update({
           status: "pending",
           attempts: 0,
           error: null,
+          error_code: null,
+          retry_count: (existing?.retry_count ?? 0) + 1,
+          last_retry_at: new Date().toISOString(),
           run_at: new Date().toISOString(),
           started_at: null,
           finished_at: null,

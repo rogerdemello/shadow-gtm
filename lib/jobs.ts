@@ -113,10 +113,26 @@ export async function completeJob(
   if (error) log.error("completeJob failed", error, { jobId });
 }
 
-/** Record a failure. Retries with backoff until max_attempts, then marks failed. */
+/** Categorize a failure message into a stable code so failures are aggregatable
+ *  (dashboard/Sentry) instead of opaque free text. */
+export function categorizeJobError(msg: string): string {
+  const m = msg.toLowerCase();
+  if (/\b429\b|rate limit|too many|resource_exhausted|quota/.test(m)) return "rate_limit";
+  if (/recitation/.test(m)) return "recitation";
+  if (/timeout|timed out|etimedout|deadline/.test(m)) return "timeout";
+  if (/\b5\d\d\b|unavailable|overloaded|econnreset|network|fetch failed/.test(m)) return "upstream";
+  if (/not found|no company|missing/.test(m)) return "not_found";
+  if (/parse|json|schema|invalid/.test(m)) return "parse";
+  if (/api key|api_key|unauthenticated|permission|forbidden/.test(m)) return "auth";
+  return "unknown";
+}
+
+/** Record a failure. Retries with backoff until max_attempts, then marks failed
+ *  (dead-letter): categorizes the error, alerts the org, and reports to Sentry. */
 export async function failJob(db: Db, job: JobRow, errMsg: string): Promise<void> {
   const attempts = job.attempts + 1;
   const exhausted = attempts >= job.max_attempts;
+  const errorCode = categorizeJobError(errMsg);
   const backoffMs = Math.min(60 * 60 * 1000, 2 ** attempts * 60 * 1000); // cap 1h
   const { error } = await db
     .from("scan_jobs")
@@ -124,6 +140,7 @@ export async function failJob(db: Db, job: JobRow, errMsg: string): Promise<void
       status: (exhausted ? "failed" : "pending") as JobStatusEnum,
       attempts,
       error: errMsg.slice(0, 500),
+      error_code: errorCode,
       run_at: exhausted
         ? job.run_at
         : new Date(Date.now() + backoffMs).toISOString(),
@@ -131,7 +148,34 @@ export async function failJob(db: Db, job: JobRow, errMsg: string): Promise<void
       started_at: null,
     })
     .eq("id", job.id);
-  if (error) log.error("failJob failed", error, { jobId: job.id });
+  if (error) log.error("failJob update failed", error, { jobId: job.id });
+
+  if (exhausted) {
+    // Dead-lettered: surface it (in-app notification) and report to Sentry so a
+    // run of failures is visible, not just buried in the queue.
+    log.error("scan job dead-lettered", new Error(errMsg), {
+      jobId: job.id,
+      orgId: job.org_id,
+      kind: job.kind,
+      errorCode,
+      attempts,
+    });
+    try {
+      const store = storeFor({ db, orgId: job.org_id, userId: null });
+      const company = await store.getCompany(job.company_id);
+      await store.createNotifications([
+        {
+          companyId: job.company_id,
+          companyName: company?.name ?? "A competitor",
+          kind: "job_failed",
+          title: `Scan failed · ${company?.name ?? "competitor"}`,
+          body: `A background ${job.kind} job gave up after ${attempts} attempts (${errorCode}). Retry it from Settings → Usage.`,
+        },
+      ]);
+    } catch (e) {
+      log.warn("failJob notification failed", { jobId: job.id, error: (e as Error).message });
+    }
+  }
 }
 
 /** Materialize due schedules into scan_jobs, then advance each schedule's

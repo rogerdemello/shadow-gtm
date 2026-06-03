@@ -1402,6 +1402,8 @@ function JobsPanel({ role }: { role: MemberRole }) {
     companyId: string;
     attempts: number;
     error: string | null;
+    errorCode: string | null;
+    retryCount: number;
     finishedAt: string | null;
     createdAt: string;
   }
@@ -1440,7 +1442,17 @@ function JobsPanel({ role }: { role: MemberRole }) {
                 <span className="font-mono text-[11px] text-slate-400">
                   {j.attempts} attempt{j.attempts === 1 ? "" : "s"}
                 </span>
-                <span className="ml-2 truncate text-xs text-signal-high">
+                {j.errorCode && (
+                  <span className="ml-2 rounded bg-signal-high/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-signal-high">
+                    {j.errorCode}
+                  </span>
+                )}
+                {j.retryCount > 0 && (
+                  <span className="ml-2 font-mono text-[10px] text-slate-600">
+                    retried {j.retryCount}×
+                  </span>
+                )}
+                <span className="ml-2 truncate text-xs text-slate-500">
                   {j.error ?? "unknown error"}
                 </span>
               </span>

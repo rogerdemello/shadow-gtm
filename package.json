@@ -17,7 +17,8 @@
     "test:int": "vitest run --config vitest.integration.config.ts",
     "eval": "vitest run --config vitest.eval.config.ts",
     "smoke": "node scripts/smoke-gemini.mjs",
-    "db:migrate": "node scripts/apply-migrations.mjs"
+    "db:migrate": "node scripts/apply-migrations.mjs",
+    "db:cron": "node scripts/setup-cron.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",

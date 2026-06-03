@@ -9,6 +9,7 @@ import type {
   MemberRole,
   Plan,
   PlanId,
+  Schedule,
   Subscription,
   UsageSummary,
   WebhookEndpoint,
@@ -21,6 +22,7 @@ const TABS = [
   "Billing",
   "Integrations",
   "Alerts",
+  "Schedules",
   "Usage",
   "Audit",
 ] as const;
@@ -70,6 +72,7 @@ export default function Settings({
       {tab === "Billing" && <BillingTab role={role} />}
       {tab === "Integrations" && <IntegrationsTab role={role} />}
       {tab === "Alerts" && <AlertsTab />}
+      {tab === "Schedules" && <SchedulesTab role={role} />}
       {tab === "Usage" && <UsageTab role={role} />}
       {tab === "Audit" && <AuditTab />}
     </div>
@@ -1107,6 +1110,219 @@ function AlertsTab() {
       >
         {saving ? "Saving…" : "Save alert settings"}
       </button>
+    </Panel>
+  );
+}
+
+// ── Schedules ────────────────────────────────────────────────────────────────
+
+const CADENCE_LABEL: Record<string, string> = {
+  hourly: "Hourly",
+  daily: "Daily",
+  weekly: "Weekly",
+};
+
+function SchedulesTab({ role }: { role: MemberRole }) {
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
+  const [companyId, setCompanyId] = useState<string>(""); // "" = whole watchlist
+  const [cadence, setCadence] = useState<"hourly" | "daily" | "weekly">("daily");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "error" | "ok"; text: string } | null>(null);
+  const admin = isAdmin(role);
+
+  const load = useCallback(async () => {
+    try {
+      const [s, c] = await Promise.all([
+        jsonOrThrow(await fetch("/api/schedules")),
+        jsonOrThrow(await fetch("/api/companies")),
+      ]);
+      setSchedules((s.schedules as Schedule[]) ?? []);
+      setCompanies((c.companies as { id: string; name: string }[]) ?? []);
+    } catch (e) {
+      setMsg({ kind: "error", text: (e as Error).message });
+    }
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const nameFor = (id: string | null) =>
+    id ? companies.find((c) => c.id === id)?.name ?? "(removed competitor)" : "Whole watchlist";
+
+  async function create() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await jsonOrThrow(
+        await fetch("/api/schedules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: companyId || null, cadence }),
+        }),
+      );
+      setMsg({ kind: "ok", text: "Schedule created." });
+      await load();
+    } catch (e) {
+      setMsg({ kind: "error", text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggle(s: Schedule) {
+    setMsg(null);
+    try {
+      await jsonOrThrow(
+        await fetch(`/api/schedules/${s.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: !s.enabled }),
+        }),
+      );
+      await load();
+    } catch (e) {
+      setMsg({ kind: "error", text: (e as Error).message });
+    }
+  }
+
+  async function setCadenceFor(s: Schedule, value: string) {
+    setMsg(null);
+    try {
+      await jsonOrThrow(
+        await fetch(`/api/schedules/${s.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cadence: value }),
+        }),
+      );
+      await load();
+    } catch (e) {
+      setMsg({ kind: "error", text: (e as Error).message });
+    }
+  }
+
+  async function remove(id: string) {
+    setMsg(null);
+    try {
+      await jsonOrThrow(await fetch(`/api/schedules/${id}`, { method: "DELETE" }));
+      await load();
+    } catch (e) {
+      setMsg({ kind: "error", text: (e as Error).message });
+    }
+  }
+
+  return (
+    <Panel>
+      {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
+      <p className="mb-3 text-xs text-slate-500">
+        Background re-scans run automatically on a cadence. A schedule can target one competitor
+        or the whole watchlist; the worker drains the queue and the autonomy setting (Alerts tab)
+        decides what the agent does with what it finds.
+      </p>
+
+      {admin && (
+        <div className="mb-4 flex flex-wrap items-end gap-2 border-b border-ink-500/40 pb-4">
+          <div>
+            <label className="mb-1 block font-mono text-[10px] uppercase tracking-widest text-slate-500">
+              Target
+            </label>
+            <select
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+              className="rounded border border-ink-500 bg-ink-900 px-2 py-2 text-sm text-slate-200 outline-none focus:border-accent/60"
+            >
+              <option value="">Whole watchlist</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block font-mono text-[10px] uppercase tracking-widest text-slate-500">
+              Cadence
+            </label>
+            <select
+              value={cadence}
+              onChange={(e) => setCadence(e.target.value as "hourly" | "daily" | "weekly")}
+              className="rounded border border-ink-500 bg-ink-900 px-2 py-2 text-sm text-slate-200 outline-none focus:border-accent/60"
+            >
+              <option value="hourly">Hourly</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </div>
+          <button
+            onClick={create}
+            disabled={busy}
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-bold text-ink-900 transition hover:brightness-110 disabled:opacity-40"
+          >
+            {busy ? "Adding…" : "Add schedule"}
+          </button>
+        </div>
+      )}
+
+      {schedules.length === 0 ? (
+        <p className="text-sm text-slate-600">No schedules yet — scans run only when triggered.</p>
+      ) : (
+        <ul className="divide-y divide-ink-500/40">
+          {schedules.map((s) => (
+            <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <div className="min-w-0">
+                <div className="truncate text-sm text-slate-200">{nameFor(s.companyId)}</div>
+                <div className="font-mono text-[10px] text-slate-600">
+                  next run {new Date(s.nextRunAt).toLocaleString()}
+                  {s.lastRunAt && ` · last ${new Date(s.lastRunAt).toLocaleString()}`}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {admin ? (
+                  <select
+                    value={s.cadence}
+                    onChange={(e) => setCadenceFor(s, e.target.value)}
+                    className="rounded border border-ink-500 bg-ink-900 px-2 py-1 font-mono text-[11px] text-slate-300 outline-none focus:border-accent/60"
+                  >
+                    <option value="hourly">Hourly</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                  </select>
+                ) : (
+                  <span className="font-mono text-[11px] text-slate-400">
+                    {CADENCE_LABEL[s.cadence] ?? s.cadence}
+                  </span>
+                )}
+                <button
+                  onClick={() => admin && toggle(s)}
+                  disabled={!admin}
+                  className={`rounded-lg border px-2 py-1 font-mono text-[10px] uppercase tracking-wider transition disabled:opacity-60 ${
+                    s.enabled
+                      ? "border-accent/60 bg-accent/10 text-accent"
+                      : "border-ink-500 text-slate-500"
+                  }`}
+                  title={admin ? "Toggle" : undefined}
+                >
+                  {s.enabled ? "Enabled" : "Paused"}
+                </button>
+                {admin && (
+                  <button
+                    onClick={() => remove(s.id)}
+                    className="rounded border border-ink-500 px-2 py-1 font-mono text-[10px] text-slate-500 transition hover:border-signal-high/60 hover:text-signal-high"
+                    title="Delete schedule"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!admin && (
+        <p className="mt-3 text-xs text-slate-600">Only owners/admins can change schedules.</p>
+      )}
     </Panel>
   );
 }
